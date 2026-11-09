@@ -30,6 +30,7 @@
     background: var(--bg); padding: 8px 8px 10px; border-radius: 0 0 14px 14px; box-shadow: 0 6px 18px rgba(59, 42, 32, .28); }
   .pop.on { display: block; }
   .pop .status { margin: 6px 2px; }
+  .rack .rt.used { opacity: .18; }
   .poph { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
   .poph .rack { flex: 1; margin: 0; --cs: min(9.5vw, 42px); }
   .poph .clock { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
@@ -251,9 +252,6 @@ function refresh() {
     : saveErr ? `<div class="banner" style="color:var(--danger)">${esc(saveErr)}</div>` : '';
   // po položení tahu jen kameny, které v zásobníku zbyly (meta.left)
   const shownRack = m.left ? (Array.isArray(m.left) ? m.left : Object.values(m.left)) : rack();
-  const rackHtml = shownRack.map(t => `<div class="rt">${L.tileHtml(t, m.vals || {})}</div>`).join('');
-  document.getElementById('rack').innerHTML = rackHtml;
-  document.getElementById('rack2').innerHTML = rackHtml;
   // po konci času už zkoušení slov nemá smysl
   const playing = m.phase === 'think' || m.phase === 'ready';
   if (!playing && (ed.start != null || ed.word)) { ed.start = null; ed.dir = null; ed.word = ''; }
@@ -268,6 +266,16 @@ function refresh() {
     if (need > boardGap) { boardGap = need; bx.style.marginTop = need + 'px'; }
   }
   const t = tryEval();
+  // kameny zkoušeného slova v zásobníku zešednou (místo drží, ať nic neposkakuje); žolík = malé písmeno
+  const used = new Set();
+  (t.e?.ok ? t.e.tiles : []).forEach(x => {
+    const want = x.t === x.t.toUpperCase() ? x.t : '?';
+    const k = shownRack.findIndex((r, j) => !used.has(j) && r === want);
+    if (k >= 0) used.add(k);
+  });
+  const rackHtml = shownRack.map((r, j) => `<div class="rt${used.has(j) ? ' used' : ''}">${L.tileHtml(r, m.vals || {})}</div>`).join('');
+  document.getElementById('rack').innerHTML = rackHtml;
+  document.getElementById('rack2').innerHTML = rackHtml;
   const hint = document.getElementById('hint');
   hint.style.display = playing && !open ? '' : 'none';
   hint.className = t.err ? 'status err' : 'status';
