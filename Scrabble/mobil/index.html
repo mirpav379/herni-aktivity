@@ -102,7 +102,7 @@
 <script>
 'use strict';
 // verze stránky pro mobily – zvýšit při každém nahrání na GitHub (ukazuje se v hlavičce za číslem tahu)
-const VERSION = 'v3';
+const VERSION = 'v4';
 const L = ScrabLogic;
 const store = ScrabNet.mode === 'test' ? sessionStorage : localStorage;   // v testu má každá karta svůj tým
 const ME_KEY = 'scrabble-me';
@@ -253,7 +253,7 @@ function refresh() {
       : 'Sledujte plátno.'}</div>`
     : saveErr ? `<div class="banner" style="color:var(--danger)">${esc(saveErr)}</div>` : '';
   // po položení tahu jen kameny, které v zásobníku zbyly (meta.left)
-  const shownRack = m.left ? (Array.isArray(m.left) ? m.left : Object.values(m.left)) : rack();
+  const shownRack = m.left ? (Array.isArray(m.left) ? m.left : Object.values(m.left)) : m.placed ? [] : rack();
   // po konci času už zkoušení slov nemá smysl
   const playing = m.phase === 'think' || m.phase === 'ready';
   if (!playing && (ed.start != null || ed.word)) { ed.start = null; ed.dir = null; ed.word = ''; }
@@ -268,13 +268,23 @@ function refresh() {
     if (need > boardGap) { boardGap = need; bx.style.marginTop = need + 'px'; }
   }
   const t = tryEval();
-  // kameny zkoušeného slova v zásobníku zešednou (místo drží, ať nic neposkakuje); žolík = malé písmeno
+  // kameny psaného slova v zásobníku zešednou hned při psaní (místo drží, ať nic neposkakuje);
+  // písmena, která už leží na desce v cestě slova, se nepočítají; chybějící písmeno bere žolík
   const used = new Set();
-  (t.e?.ok ? t.e.tiles : []).forEach(x => {
-    const want = x.t === x.t.toUpperCase() ? x.t : '?';
-    const k = shownRack.findIndex((r, j) => !used.has(j) && r === want);
+  const take = want => {
+    let k = shownRack.findIndex((r, j) => !used.has(j) && r === want);
+    if (k < 0) k = shownRack.findIndex((r, j) => !used.has(j) && r === '?');
     if (k >= 0) used.add(k);
-  });
+  };
+  if (t.e?.ok) t.e.tiles.forEach(x => take(x.t === x.t.toUpperCase() ? x.t : '?'));
+  else if (playing && ed.word) {
+    const b0 = board0(), step = ed.dir === 'v' ? 15 : 1;
+    [...L.up(ed.word.replace(/\s/g, ''))].forEach((ch, k) => {
+      const i = ed.start != null && ed.dir ? ed.start + k * step : -1;
+      const inRow = i >= 0 && i < 225 && (ed.dir === 'v' || Math.floor(i / 15) === Math.floor(ed.start / 15));
+      if (!(inRow && b0[i])) take(ch);
+    });
+  }
   const rackHtml = shownRack.map((r, j) => `<div class="rt${used.has(j) ? ' used' : ''}">${L.tileHtml(r, m.vals || {})}</div>`).join('');
   document.getElementById('rack').innerHTML = rackHtml;
   document.getElementById('rack2').innerHTML = rackHtml;
