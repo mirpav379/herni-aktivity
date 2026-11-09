@@ -101,6 +101,8 @@
 <script src="net.js"></script>
 <script>
 'use strict';
+// verze stránky pro mobily – zvýšit při každém nahrání na GitHub (ukazuje se v hlavičce za číslem tahu)
+const VERSION = 'v3';
 const L = ScrabLogic;
 const store = ScrabNet.mode === 'test' ? sessionStorage : localStorage;   // v testu má každá karta svůj tým
 const ME_KEY = 'scrabble-me';
@@ -163,7 +165,7 @@ function update() {
   }
   const m = meta();
   document.getElementById('team').textContent = live.teams?.[uid]?.name || me.name;
-  document.getElementById('turn').textContent = m.turn ? `tah ${m.turn}` : '';
+  document.getElementById('turn').textContent = (m.turn ? `tah ${m.turn} ` : '') + `(${VERSION})`;
   // nový tah → prázdný seznam i pokus
   if (m.turn !== listTurn) {
     listTurn = m.turn; ed.start = null; ed.dir = null; ed.word = ''; saveErr = '';
