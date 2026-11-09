@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Scrabble – tým</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lexend:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="deska.css">
+<style>
+  :root { --bg: #f6ede3; --panel: #fffaf4; --line: #e3d2bf; --text: #3b2a20; --muted: #8a7462;
+    --acc: #c4643c; --ok: #7d8c55; --honey: #b07a1f; --danger: #b3412f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Inter", system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+  button, input { font: inherit; color: inherit; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 8px 8px 40px; }
+  header { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
+  header .team { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 17px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  header .turn { color: var(--muted); font-size: 14px; }
+  header .clock { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 20px; font-variant-numeric: tabular-nums; min-width: 52px; text-align: right; }
+  header .clock.low { color: var(--danger); }
+  .rack { display: flex; gap: 4px; justify-content: center; padding: 6px; border-radius: 10px; background: #4a2c18; margin-bottom: 8px; --cs: min(11vw, 46px); min-height: calc(var(--cs) + 12px); }
+  .board-box { display: flex; justify-content: center; touch-action: none; }
+  .bd { --bs: min(calc(100vw - 16px), 544px); }
+  .board-box { margin-top: 4px; }
+  .bd .sq { cursor: pointer; }
+  .entry { display: flex; gap: 6px; align-items: center; }
+  /* okénko pro slovo: po volbě pole se objeví nahoře nad deskou (klávesnice zakryje spodek) */
+  .pop { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 10; max-width: 560px; margin: 0 auto;
+    background: var(--bg); padding: 8px 8px 10px; border-radius: 0 0 14px 14px; box-shadow: 0 6px 18px rgba(59, 42, 32, .28); }
+  .pop.on { display: block; }
+  .pop .status { margin: 6px 2px; }
+  .rack .rt.used { opacity: .18; }
+  .poph { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .poph .rack { flex: 1; margin: 0; --cs: min(9.5vw, 42px); }
+  .poph .clock { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
+  .poph .clock.low { color: var(--danger); }
+  .dirs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; flex: none; }
+  .dirs button { border: 0; background: transparent; width: 42px; height: 42px; cursor: pointer; display: grid; place-items: center; }
+  .dirs button svg { width: 22px; height: 22px; }
+  .dirs button[data-d="v"] svg { transform: rotate(90deg); }
+  .dirs button.on { background: var(--text); color: #fff8ee; }
+  .dirs.ask { animation: ask 0.8s ease-in-out infinite alternate; }
+  @keyframes ask { to { box-shadow: 0 0 0 3px var(--acc); } }
+  .pos { font-family: "Lexend", sans-serif; font-weight: 700; min-width: 40px; text-align: center; }
+  .word { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line); background: #fff;
+    font-family: "Lexend", sans-serif; font-weight: 700; font-size: 20px; text-transform: uppercase; letter-spacing: .05em; }
+  .word:focus { outline: 2px solid var(--acc); outline-offset: 1px; }
+  .status { min-height: 24px; margin: 8px 2px; font-size: 15px; line-height: 1.4; }
+  .status.ok { color: var(--ok); font-weight: 600; }
+  .status.err { color: var(--danger); }
+  .status .w { font-family: "Lexend", sans-serif; font-weight: 700; }
+  .btns { display: flex; gap: 8px; }
+  .btn { flex: 1; height: 46px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-weight: 600; font-size: 16px; cursor: pointer; }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: #fff8ee; }
+  .btn:disabled { opacity: .4; }
+  h3 { font-family: "Lexend", sans-serif; font-size: 17px; margin: 22px 2px 8px; display: flex; align-items: baseline; gap: 8px; }
+  h3 small { font-family: "Inter", sans-serif; font-weight: 400; color: var(--muted); font-size: 13px; }
+  /* semafor jako v pultu */
+  .sol { display: grid; grid-template-columns: 30px 1fr auto auto; gap: 6px; align-items: center; border-radius: 12px; padding: 6px 6px 6px 10px; margin-bottom: 6px;
+    background: #ece6e0; border: 1px solid #d6cdc4; color: #6f6259; }
+  .sol.s-ok { background: #e6ebd3; border-color: var(--ok); color: color-mix(in srgb, var(--ok) 65%, var(--text)); }
+  .sol.s-warn { background: #fbefd3; border-color: var(--honey); color: color-mix(in srgb, var(--honey) 60%, var(--text)); }
+  .sol.s-no { background: #f8e3dd; border-color: var(--danger); color: var(--danger); }
+  .sol.s-no .mv b, .sol.s-bad .mv b { text-decoration: line-through; }
+  .sol.s-bad { background: #f4ece4; border-color: var(--line); color: var(--muted); }
+  .sol.top { box-shadow: 0 0 0 2px var(--text); }
+  .sol .ic { display: inline-block; width: 18px; height: 18px; margin-right: 6px; vertical-align: -3px; }
+  .sol .ic svg { width: 100%; height: 100%; display: block; }
+  .sol .note .give { font-family: "Inter", sans-serif; font-size: 12.5px; color: var(--text); }
+  .sol .n { font-family: "Lexend", sans-serif; font-weight: 700; color: var(--muted); }
+  .sol .mv { cursor: pointer; min-width: 0; }
+  .sol .mv b { font-family: "Lexend", sans-serif; font-size: 17px; letter-spacing: .03em; }
+  .sol .mv small { color: var(--muted); margin-right: 6px; font-weight: 600; }
+  .sol .note { display: block; font-size: 12.5px; margin-top: 1px; font-weight: 600; }
+  .sol .pts { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 17px; padding: 0 4px; }
+  .sol .tools { display: flex; gap: 2px; }
+  .sol .tools button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: transparent; font-size: 16px; cursor: pointer; color: var(--muted); }
+  .sol .tools button:active { background: #f1e3d4; }
+  .sol .tools button:disabled { opacity: .25; }
+  .empty { color: var(--muted); font-size: 14px; margin: 0 2px; }
+  .banner { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 8px 0; font-size: 15px; line-height: 1.5; }
+  .banner b { font-family: "Lexend", sans-serif; }
+  .banner .w { font-family: "Lexend", sans-serif; font-weight: 700; }
+  .join { max-width: 380px; margin: 40px auto; padding: 0 16px; }
+  .join h1 { font-family: "Lexend", sans-serif; color: var(--acc); font-size: 30px; margin: 0 0 4px; }
+  .join p { color: var(--muted); margin: 0 0 22px; line-height: 1.5; }
+  .join label { display: block; font-weight: 600; margin: 14px 0 6px; }
+  .join input { width: 100%; height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-size: 18px; }
+  .join input.code { text-transform: uppercase; letter-spacing: .2em; font-family: "Lexend", sans-serif; font-weight: 700; }
+  .join .btn { width: 100%; margin-top: 22px; }
+  .join .err { color: var(--danger); margin-top: 12px; min-height: 1.4em; }
+  .center { text-align: center; color: var(--muted); margin: 50px 16px; line-height: 1.6; font-size: 16px; }
+  .center b { color: var(--text); font-family: "Lexend", sans-serif; font-size: 20px; display: block; margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="config.js"></script>
+<script src="hra.js"></script>
+<script src="net.js"></script>
+<script>
+'use strict';
+// verze stránky pro mobily – zvýšit při každém nahrání na GitHub (ukazuje se v hlavičce za číslem tahu)
+const VERSION = 'v4';
+const L = ScrabLogic;
+const store = ScrabNet.mode === 'test' ? sessionStorage : localStorage;   // v testu má každá karta svůj tým
+const ME_KEY = 'scrabble-me';
+let me = (() => { try { return JSON.parse(store.getItem(ME_KEY)); } catch { return null; } })();
+let uid = null, live = null, unwatch = null;
+let listTurn = -1, list = [];                       // řešení týmu v aktuálním tahu (první = TOP)
+const ed = { start: null, dir: null, word: '' };    // rozepsaný pokus
+let saveErr = '';
+
+const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg>';
+const svgI = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONS = { ok: svgI('<path d="M4.5 12.5l5 5 10-11"/>'), warn: svgI('<path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.4v.1"/>'), no: svgI('<path d="M6 6l12 12M18 6 6 18"/>') };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pw = n => n === 1 ? 'bod' : n > 1 && n < 5 ? 'body' : 'bodů';
+const fmt = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const meta = () => live?.meta || {};
+const vals = () => meta().vals || {};
+const board = () => L.boardFromStr(meta().board);
+const rack = () => Array.isArray(meta().rack) ? meta().rack : Object.values(meta().rack || {});
+const canEdit = () => meta().phase === 'think' && ScrabNet.now() < (meta().endsAt || 0);
+const flagOf = key => live?.flags?.[meta().turn]?.[key] || null;
+// návrhy se hodnotí podle desky ze začátku tahu (po položení by vítězné slovo „už leželo na desce“)
+const board0 = () => meta().board0 ? L.boardFromStr(meta().board0) : board();
+const ev = c => L.evaluate(board0(), rack(), c.pos, c.word, vals(), meta().bonus);
+
+/* ---------- připojení ---------- */
+function joinScreen(err = '') {
+  const code = new URLSearchParams(location.search).get('r') || me?.code || '';
+  document.getElementById('app').innerHTML = `<div class="join">
+    <h1>Scrabble</h1><p>Opisovaná varianta – jeden mobil za tým.</p>
+    <label for="j-code">Kód hry</label><input id="j-code" class="code" maxlength="5" autocomplete="off" value="${esc(code.toUpperCase())}">
+    <label for="j-name">Název týmu</label><input id="j-name" maxlength="24" autocomplete="off" value="${esc(me?.name || '')}" enterkeyhint="go">
+    <button class="btn primary" id="j-go">Připojit se</button><div class="err" id="j-err">${esc(err)}</div></div>`;
+  const go = async () => {
+    const c = document.getElementById('j-code').value.trim().toUpperCase(), n = document.getElementById('j-name').value.trim();
+    if (!c || !n) return document.getElementById('j-err').textContent = 'Vyplňte kód hry i název týmu.';
+    if (!(await ScrabNet.exists(c))) return document.getElementById('j-err').textContent = 'Hra s tímto kódem neexistuje.';
+    me = { code: c, name: n }; store.setItem(ME_KEY, JSON.stringify(me));
+    await ScrabNet.join(c, n); start();
+  };
+  document.getElementById('j-go').onclick = go;
+  document.getElementById('j-name').onkeydown = e => { if (e.key === 'Enter') go(); };
+  document.getElementById(code ? 'j-name' : 'j-code').focus();
+}
+
+function start() {
+  unwatch?.();
+  document.getElementById('app').innerHTML = `<div class="wrap">
+    <header><span class="team" id="team"></span><span class="turn" id="turn"></span><span class="clock" id="clock"></span></header>
+    <div id="body"></div></div>`;
+  unwatch = ScrabNet.watch(me.code, tree => { live = tree; update(); });
+}
+
+/* ---------- překreslení ---------- */
+let shape = '';
+function update() {
+  if (!live) return joinScreen('Hra už skončila nebo neexistuje.');
+  if (!live.teams?.[uid]) {   // moderátor tým odebral
+    if (meta().phase !== 'end') return joinScreen('Tým byl odebrán – připojte se znovu.');
+  }
+  const m = meta();
+  document.getElementById('team').textContent = live.teams?.[uid]?.name || me.name;
+  document.getElementById('turn').textContent = (m.turn ? `tah ${m.turn} ` : '') + `(${VERSION})`;
+  // nový tah → prázdný seznam i pokus
+  if (m.turn !== listTurn) {
+    listTurn = m.turn; ed.start = null; ed.dir = null; ed.word = ''; saveErr = '';
+    list = dbList();
+  } else if (m.phase !== 'think') list = dbList();
+  const want = ['ready', 'think', 'closed'].includes(m.phase) ? 'game' : m.phase;
+  if (want !== shape) { shape = want; build(); }
+  if (shape === 'game') refresh();
+  else if (shape === 'end') endScreen();
+}
+function dbList() {
+  const x = live?.moves?.[meta().turn]?.[uid]?.list;
+  return (Array.isArray(x) ? x : Object.values(x || {})).filter(Boolean).map(c => ({ pos: c.pos, word: c.word }));
+}
+
+function build() {
+  const body = document.getElementById('body');
+  if (shape === 'join') { body.innerHTML = `<div class="center"><b>Jste ve hře</b>Hra začne, až moderátor vylosuje první kameny. Dívejte se na plátno.</div>`; return; }
+  if (shape === 'end') { endScreen(); return; }
+  boardGap = 4;
+  body.innerHTML = `
+    <div id="banner"></div>
+    <div class="rack" id="rack"></div>
+    <div class="status" id="hint"></div>
+    <div class="board-box" id="board"></div>
+    <h3>Naše návrhy <small>(dle priority položení)</small></h3>
+    <div id="list"></div>
+    <div class="pop" id="pop"><div class="poph"><div class="rack" id="rack2"></div><span class="clock" id="clock2"></span></div><form id="entryf" autocomplete="off">
+      <div class="entry">
+        <div class="dirs" id="dirs"><button type="button" data-d="h" aria-label="vodorovně">${ARROW}</button><button type="button" data-d="v" aria-label="svisle">${ARROW}</button></div>
+        <span class="pos" id="pos">–</span>
+        <input class="word" id="word" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="send" placeholder="slovo">
+      </div>
+      <div class="status" id="status"></div>
+      <div class="btns"><button type="button" class="btn" id="drop">Zahodit</button><button type="submit" class="btn primary" id="save">Uložit návrh</button></div>
+    </form></div>`;
+  const word = document.getElementById('word');
+  word.oninput = () => { ed.word = word.value; refresh(); };
+  // Enter / „Odeslat“ na mobilní klávesnici = odeslání formuláře (keydown Enter na Androidu často nepřijde)
+  document.getElementById('entryf').onsubmit = e => { e.preventDefault(); ed.word = word.value; saveTry(); };
+  document.getElementById('dirs').onclick = e => {
+    const b = e.target.closest('button'); if (!b) return;
+    ed.dir = b.dataset.d; if (ed.start == null) ed.start = null;
+    refresh(); if (ed.start != null) word.focus();
+  };
+  document.getElementById('drop').onclick = () => { ed.start = null; ed.dir = null; ed.word = ''; word.value = ''; word.blur(); refresh(); };
+  // ťuknutí = počáteční pole, tažení prstem = i směr
+  const bx = document.getElementById('board');
+  let down = null;
+  bx.addEventListener('pointerdown', e => { const sq = e.target.closest('.sq'); if (!sq) return; down = { i: +sq.dataset.i, x: e.clientX, y: e.clientY }; e.preventDefault(); });
+  bx.addEventListener('pointerup', e => {
+    if (!down) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y, i = down.i; down = null;
+    if (Math.hypot(dx, dy) > 14) { ed.start = i; ed.dir = Math.abs(dx) >= Math.abs(dy) ? 'h' : 'v'; }
+    else if (ed.start === i && ed.dir) ed.dir = ed.dir === 'h' ? 'v' : 'h';
+    else { ed.start = i; ed.dir = null; }
+    refresh();
+    if (ed.dir) word.focus({ preventScroll: true });
+  });
+  bx.addEventListener('pointercancel', () => down = null);
+}
+
+const BS = 'min(calc(100vw - 16px), 544px)';
+let boardGap = 4;
+const tryPos = () => ed.start != null && ed.dir ? L.posStr(Math.floor(ed.start / 15), ed.start % 15, ed.dir) : null;
+function tryEval() {
+  const pos = tryPos();
+  const first = board().every(x => !x);
+  const centerNote = 'První slovo musí vést přes střed desky – políčko s hvězdičkou (H8).';
+  if (ed.start == null) return { msg: 'Ťukněte na pole, kde slovo začíná (nebo z něj táhněte prstem doprava či dolů).' + (first ? ' ' + centerNote : '') };
+  if (!ed.dir) return { msg: 'Zvolte směr: vodorovně, nebo svisle.' };
+  // první slovo: hned upozornit, když z tohoto pole a směru střed minout nejde
+  const r = Math.floor(ed.start / 15), c = ed.start % 15;
+  if (first && !(ed.dir === 'h' ? r === 7 && c <= 7 : c === 7 && r <= 7)) return { err: centerNote };
+  if (!ed.word.trim()) return { msg: `Napište celé slovo od pole ${pos} – i s písmeny, která už na desce leží.` };
+  return { e: ev({ pos, word: ed.word }) };
+}
+
+function refresh() {
+  const m = meta(), editable = canEdit();
+  const banner = document.getElementById('banner');
+  const res = m.res?.[uid];
+  banner.innerHTML = m.phase === 'ready' ? '<div class="banner"><b>Kameny jsou vylosované.</b> Zkoušet můžete hned, ukládat až poběží čas.</div>'
+    : m.phase === 'closed' ? `<div class="banner"><b>Čas vypršel.</b> ${res ? `Za tento tah máte <b>${res[0]}</b> ${pw(res[0])} · celkem ${res[1]}.`
+      : 'Sledujte plátno.'}</div>`
+    : saveErr ? `<div class="banner" style="color:var(--danger)">${esc(saveErr)}</div>` : '';
+  // po položení tahu jen kameny, které v zásobníku zbyly (meta.left)
+  const shownRack = m.left ? (Array.isArray(m.left) ? m.left : Object.values(m.left)) : m.placed ? [] : rack();
+  // po konci času už zkoušení slov nemá smysl
+  const playing = m.phase === 'think' || m.phase === 'ready';
+  if (!playing && (ed.start != null || ed.word)) { ed.start = null; ed.dir = null; ed.word = ''; }
+  const open = playing && ed.start != null;
+  const pop = document.getElementById('pop');
+  pop.classList.toggle('on', open);
+  // okénko nesmí zakrýt desku: deska začíná až pod ním (odstup se jen zvětšuje, ať nic neskáče)
+  if (open) {
+    const bx = document.getElementById('board');
+    const top = bx.getBoundingClientRect().top + scrollY - boardGap;
+    const need = Math.max(4, pop.offsetHeight + 6 - top);
+    if (need > boardGap) { boardGap = need; bx.style.marginTop = need + 'px'; }
+  }
+  const t = tryEval();
+  // kameny psaného slova v zásobníku zešednou hned při psaní (místo drží, ať nic neposkakuje);
+  // písmena, která už leží na desce v cestě slova, se nepočítají; chybějící písmeno bere žolík
+  const used = new Set();
+  const take = want => {
+    let k = shownRack.findIndex((r, j) => !used.has(j) && r === want);
+    if (k < 0) k = shownRack.findIndex((r, j) => !used.has(j) && r === '?');
+    if (k >= 0) used.add(k);
+  };
+  if (t.e?.ok) t.e.tiles.forEach(x => take(x.t === x.t.toUpperCase() ? x.t : '?'));
+  else if (playing && ed.word) {
+    const b0 = board0(), step = ed.dir === 'v' ? 15 : 1;
+    [...L.up(ed.word.replace(/\s/g, ''))].forEach((ch, k) => {
+      const i = ed.start != null && ed.dir ? ed.start + k * step : -1;
+      const inRow = i >= 0 && i < 225 && (ed.dir === 'v' || Math.floor(i / 15) === Math.floor(ed.start / 15));
+      if (!(inRow && b0[i])) take(ch);
+    });
+  }
+  const rackHtml = shownRack.map((r, j) => `<div class="rt${used.has(j) ? ' used' : ''}">${L.tileHtml(r, m.vals || {})}</div>`).join('');
+  document.getElementById('rack').innerHTML = rackHtml;
+  document.getElementById('rack2').innerHTML = rackHtml;
+  const hint = document.getElementById('hint');
+  hint.style.display = playing && !open ? '' : 'none';
+  hint.className = t.err ? 'status err' : 'status';
+  hint.textContent = t.msg || t.err || '';
+  const ghost = t.e?.ok ? { tiles: t.e.tiles, color: '#c4643c' } : null;
+  document.getElementById('board').innerHTML = L.boardHtml(board(), BS, vals(), { ghost, start: ed.start != null && !ghost ? { i: ed.start, dir: ed.dir } : null });
+  document.getElementById('dirs').classList.toggle('ask', ed.start != null && !ed.dir);
+  document.querySelectorAll('#dirs button').forEach(b => b.classList.toggle('on', b.dataset.d === ed.dir));
+  document.getElementById('pos').textContent = tryPos() || (ed.start != null ? L.cellName(ed.start) : '–');
+  const word = document.getElementById('word');
+  if (word.value !== ed.word) word.value = ed.word;
+  const st = document.getElementById('status');
+  if (t.msg) { st.className = 'status'; st.textContent = t.msg; }
+  else if (t.err) { st.className = 'status err'; st.textContent = t.err; }
+  else if (!t.e.ok) { st.className = 'status err'; st.textContent = t.e.err; }
+  else {
+    st.className = 'status ok';
+    st.innerHTML = `✓ ${t.e.score} ${pw(t.e.score)} – ${t.e.words.map(w => `<span class="w">${esc(w.w)}</span> ${w.s}`).join(' + ')}${t.e.bingo ? ` + ${t.e.bingo} za všech 7 kamenů` : ''}`;
+  }
+  document.getElementById('save').disabled = !(editable && t.e?.ok);
+  document.getElementById('save').textContent = editable || m.phase !== 'ready' ? 'Uložit návrh' : 'Ukládat až poběží čas';
+  renderList(editable);
+  tickClock();
+}
+
+function renderList(editable) {
+  const el = document.getElementById('list');
+  if (!list.length) { el.innerHTML = '<p class="empty">Zatím nic.</p>'; return; }
+  let topDone = false;
+  el.innerHTML = list.map((c, k) => {
+    const e = ev(c), f = e.ok ? flagOf(e.key) : null;
+    // odevzdává se první položitelné řešení; ✕ ho vyřadí až konečné rozhodnutí při odhalování (meta.final)
+    const out = meta().out || [];
+    const isTop = !topDone && e.ok && !(f === 'no' && (Array.isArray(out) ? out : Object.values(out)).includes(e.key));
+    if (isTop) topDone = true;
+    // stejný semafor jako v pultu: neposouzeno šedě, ✓ uznáno zeleně, ⚠ pochybnost medově, ✕ neuznáno červeně
+    const state = !e.ok ? 'bad' : f || 'none';
+    // stav mluví barvou a ikonou (bez popisků); text jen u slova, které nejde položit
+    const icon = { ok: ICONS.ok, warn: ICONS.warn, no: ICONS.no }[state] || '';
+    // „odevzdáváme“ už říká podnadpis sekce – u karty jen tmavý rámeček
+    const parts = state === 'bad' ? esc(e.err) : '';
+    return `<div class="sol s-${state} ${isTop ? 'top' : ''}">
+      <span class="n">${k + 1}.</span>
+      <span class="mv" data-k="${k}">${icon ? `<span class="ic">${icon}</span>` : ''}<small>${esc(L.up(c.pos))}</small><b>${esc(L.up(c.word))}</b>${parts ? `<span class="note">${parts}</span>` : ''}</span>
+      <span class="pts">${e.ok ? e.score : '–'}</span>
+      <span class="tools">${editable ? `<button data-up="${k}" ${k ? '' : 'disabled'} aria-label="výš">▲</button><button data-down="${k}" ${k < list.length - 1 ? '' : 'disabled'} aria-label="níž">▼</button><button data-del="${k}" aria-label="smazat">✕</button>` : ''}</span>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.mv').forEach(x => x.onclick = () => {     // zobrazit řešení na desce
+    const c = list[+x.dataset.k], p = L.parsePos(c.pos);
+    if (!p) return;
+    ed.start = p.r * 15 + p.c; ed.dir = p.dir; ed.word = L.up(c.word); refresh();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  const swap = (a, b) => { [list[a], list[b]] = [list[b], list[a]]; push(); };
+  el.querySelectorAll('[data-up]').forEach(b => b.onclick = () => swap(+b.dataset.up, +b.dataset.up - 1));
+  el.querySelectorAll('[data-down]').forEach(b => b.onclick = () => swap(+b.dataset.down, +b.dataset.down + 1));
+  el.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { list.splice(+b.dataset.del, 1); push(); });
+}
+
+// uložené řešení jde nahoru (naposledy nalezené bývá nejlepší); stejné řešení se jen přesune
+function saveTry() {
+  if (!canEdit()) return;
+  const t = tryEval();
+  if (!t.e?.ok) return;
+  const c = { pos: t.e.pos, word: L.up(ed.word.trim()) };
+  list = list.filter(x => ev(x).key !== t.e.key);
+  list.unshift(c);
+  ed.word = ''; ed.start = null; ed.dir = null;
+  push();
+  document.getElementById('word').blur();
+}
+async function push() {
+  refresh();
+  const ok = await ScrabNet.saveMoves(me.code, meta().turn, list);
+  saveErr = ok ? '' : 'Čas vypršel – návrh se neuložil.';
+  if (!ok) refresh();
+}
+
+function tickClock() {
+  const m = meta();
+  ['clock', 'clock2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (m.phase === 'think' && m.paused != null) { el.textContent = '⏸ ' + fmt(m.paused); el.classList.remove('low'); }
+    else if (m.phase === 'think') { const left = (m.endsAt || 0) - ScrabNet.now(); el.textContent = fmt(left); el.classList.toggle('low', left < 10500); }
+    else if (m.phase === 'ready') { el.textContent = fmt((m.time || 0) * 1000); el.classList.remove('low'); }
+    else el.textContent = '';
+  });
+}
+let wasEditable = null;
+setInterval(() => {
+  tickClock();
+  // konec času: zamknout úpravy hned, i když pult ještě nepřepnul fázi
+  if (shape === 'game') { const e = canEdit(); if (e !== wasEditable) { wasEditable = e; refresh(); } }
+}, 250);
+
+function endScreen() {
+  const res = meta().res?.[uid];
+  document.getElementById('body').innerHTML = `<div class="center"><b>Konec hry</b>${res ? `Celkem ${res[1]} ${pw(res[1])}.<br>` : ''}Děkujeme za hru!</div>`;
+}
+
+/* ---------- start ---------- */
+(async () => {
+  await window.scrabbleLoad();
+  uid = await ScrabNet.ready();
+  const r = new URLSearchParams(location.search).get('r');
+  if (me && (!r || r.toUpperCase() === me.code) && await ScrabNet.exists(me.code)) start();
+  else joinScreen();
+})();
+</script>
+</body>
+</html>
