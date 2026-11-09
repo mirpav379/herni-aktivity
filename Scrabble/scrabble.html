@@ -1,0 +1,1558 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scrabble – opis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Lexend:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="mobil/deska.css">
+
+<!-- Styly sdílené pultem i projekcí: dřevěný stůl, krémová deska s klasickými prémiovými poli,
+     kameny jako ze slonoviny. Modrá a červená jen na prémiových polích – bez nich to není Scrabble. -->
+<style id="shared-style">
+  :root {
+    --bg: #f6ede3; --panel: #fffaf4; --line: #e3d2bf; --text: #3b2a20; --muted: #8a7462;
+    --acc: #c4643c; --acc-soft: #f3dccd; --ok: #7d8c55; --honey: #b07a1f; --danger: #b3412f;
+    --tile: "Fredoka", "Lexend", sans-serif;
+    --sans: "Inter", "Segoe UI", system-ui, sans-serif;
+    --head: "Lexend", "Inter", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); }
+
+  /* ---------- projekce (deska a kameny: mobil/deska.css) ---------- */
+  .proj { container-type: size; position: relative; overflow: hidden; color: #fdf3e2; font-family: var(--sans);
+    background: radial-gradient(ellipse 80% 70% at 35% 45%, #a26a3e 0%, #7c4c2a 55%, #5a3419 100%); }
+  .proj .stage { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3cqh; padding: 4cqh 3cqw; }
+  .proj h1 { font-family: var(--head); font-weight: 700; font-size: 6cqh; margin: 0; text-align: center; line-height: 1.25; text-shadow: 0 .3cqh 1.4cqh rgba(40, 18, 4, .5); }
+  .proj h2 { font-family: var(--head); font-weight: 500; font-size: 3.4cqh; margin: 0; text-align: center; line-height: 1.3; color: rgba(253, 243, 226, .9); }
+  .proj .kicker { font-size: 2.3cqh; text-transform: uppercase; letter-spacing: .25em; color: #ffd98f; font-weight: 700; line-height: 1.3; }
+  .proj .tchip { display: inline-block; vertical-align: middle; border: .35cqh solid #fff; border-radius: 99px; padding: .3cqh 1.3cqh;
+    font-weight: 700; font-size: 2.3cqh; line-height: 1.3; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-shadow: none; letter-spacing: 0; text-transform: none; }
+  .proj .tchip.sm { font-size: 1.7cqh; padding: .2cqh 1cqh; border-width: .25cqh; }
+  .proj .tchip.lg { font-size: 3.2cqh; padding: .5cqh 1.8cqh; }
+  .proj .appear { animation: appear .9s cubic-bezier(.2, 1.4, .4, 1) both; }
+  @keyframes appear { from { opacity: 0; transform: translateY(4cqh) scale(.8); } }
+
+  /* hra: deska vlevo, postranní sloupec vpravo (pevné rozložení ve všech fázích tahu) */
+  .proj .game { position: absolute; inset: 0; display: flex; align-items: center; gap: 3cqh; padding: 0 3cqh 0 4cqh; }
+  .proj .side { flex: 1; min-width: 0; height: 92cqh; display: flex; flex-direction: column; gap: 2.2cqh; }
+  .proj .side .top { display: flex; align-items: baseline; justify-content: space-between; gap: 2cqh; }
+  .proj .side .bag { font-size: 2cqh; color: rgba(253, 243, 226, .75); }
+  .proj .rack { display: flex; gap: 1cqh; justify-content: center; padding: 1.6cqh; border-radius: 1.6cqh; background: #4a2c18; box-shadow: inset 0 -.6cqh 0 #3a2112; min-height: 12.6cqh; }
+  /* kameny se vejdou i do užšího okna projekce (šířka sloupce = 100cqi) */
+  .proj .side { container-type: inline-size; }
+  .proj .rack .rt { --cs: min(9.4cqh, calc((100cqi - 9.2cqh) / 7)); position: relative; width: var(--cs); height: var(--cs); flex: none; }
+  .proj .rack .rt .tile { inset: 0; }
+  .proj .rack .rt.used .tile { opacity: .3; }
+  /* slavnostní losování */
+  .proj .rack .rt.flip { perspective: 40cqh; }
+  /* rub dopadne, otočí se na hranu a z hrany se vyklopí líc s písmenem (bez 3D zadní strany – spolehlivé) */
+  .proj .rack .rt.flip .card { position: absolute; inset: 0; }
+  .proj .rack .rt.flip .back { position: absolute; inset: 0; border-radius: 13%; animation: drawback 1.5s cubic-bezier(.3, .9, .3, 1) var(--d) both;
+    background: repeating-linear-gradient(115deg, #8a5a30 0 .9cqh, #7c4f29 .9cqh 1.8cqh); box-shadow: inset 0 0 0 .35cqh rgba(50, 25, 8, .4), 0 .4cqh .8cqh rgba(40, 20, 5, .4); }
+  .proj .rack .rt.flip .tile { animation: drawface 1.5s cubic-bezier(.3, .9, .3, 1) var(--d) both; }
+  @keyframes drawback {
+    0% { opacity: 0; transform: translateY(-70%) scale(.7); }
+    30% { opacity: 1; transform: translateY(0) scale(1); }
+    45% { transform: translateY(-6%) scale(1.06); }
+    62% { transform: rotateY(90deg) scale(1.08); }
+    100% { opacity: 1; transform: rotateY(90deg); }
+  }
+  @keyframes drawface {
+    0%, 62% { transform: rotateY(-90deg) scale(1.08); }
+    85% { transform: rotateY(8deg) scale(1.12); }
+    100% { transform: rotateY(0) scale(1); }
+  }
+  .proj .rack.drawing { animation: rackglow 1.6s ease-out var(--d) both; }
+  @keyframes rackglow { 0% { box-shadow: inset 0 -.6cqh 0 #3a2112; } 35% { box-shadow: inset 0 -.6cqh 0 #3a2112, 0 0 0 .5cqh #ffd98f, 0 0 6cqh rgba(255, 210, 120, .8); } 100% { box-shadow: inset 0 -.6cqh 0 #3a2112; } }
+  .proj .clock .swap { display: grid; }
+  .proj .clock .swap i { grid-area: 1 / 1; font-style: normal; }
+  .proj .clock .swap i:first-child { animation: fadeout .5s var(--d) both; }
+  .proj .clock .swap i:last-child { animation: fadein .6s var(--d) both; }
+  @keyframes fadeout { to { opacity: 0; } }
+  @keyframes fadein { from { opacity: 0; } }
+  .proj .clock { text-align: center; }
+  .proj .clock b { display: block; font-family: var(--head); font-weight: 700; font-size: 15cqh; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .proj .clock b.low { color: #ffb08a; }
+  .proj .clock.paused b { opacity: .55; animation: pausepulse 1.6s ease-in-out infinite alternate; }
+  @keyframes pausepulse { to { opacity: .9; } }
+  .proj .clock span { font-size: 2.6cqh; color: rgba(253, 243, 226, .85); }
+  .proj .big-msg { text-align: center; font-family: var(--head); font-size: 4.4cqh; font-weight: 600; line-height: 1.3; margin-top: 4cqh; }
+  .proj .now { background: rgba(40, 18, 4, .35); border: .25cqh solid rgba(253, 243, 226, .25); border-radius: 2cqh; padding: 2cqh 2.4cqh; text-align: center; }
+  .proj .now .chips { display: flex; flex-wrap: wrap; gap: .8cqh; justify-content: center; margin-bottom: 1.2cqh; }
+  .proj .now .mv { font-family: var(--tile); font-weight: 800; font-size: 5.4cqh; line-height: 1.2; letter-spacing: .03em; }
+  .proj .now .mv small { font-family: var(--head); font-weight: 500; font-size: 2.6cqh; color: rgba(253, 243, 226, .75); margin-right: 1.2cqh; letter-spacing: 0; }
+  .proj .now .pts { font-family: var(--head); font-weight: 700; font-size: 4.4cqh; color: #ffd98f; }
+  .proj .now .pts small { font-size: 2.2cqh; font-weight: 500; color: rgba(253, 243, 226, .8); }
+  .proj .now.st-no .mv, .proj .now.st-no .pts { text-decoration: line-through; text-decoration-color: #ff9c80; opacity: .7; }
+  .proj .now .stt { margin-top: 1.2cqh; display: inline-flex; align-items: center; gap: 1cqh; padding: .6cqh 1.8cqh; border-radius: 99px;
+    font-weight: 700; font-size: 2.4cqh; line-height: 1.3; min-height: 4.4cqh; }
+  .proj .now .stt svg { width: 1.2em; height: 1.2em; }
+  .proj .now.st-none .stt { visibility: hidden; }
+  .proj .now.st-ok { border-color: #a8b97a; box-shadow: 0 0 0 .3cqh #a8b97a; } .proj .now.st-ok .stt { background: #a8b97a; color: #26300f; }
+  .proj .now.st-warn { border-color: #f2b84b; box-shadow: 0 0 0 .3cqh #f2b84b; } .proj .now.st-warn .stt { background: #f2b84b; color: #3a2414; }
+  .proj .now.st-no { border-color: #e07a62; box-shadow: 0 0 0 .3cqh #e07a62; } .proj .now.st-no .stt { background: #e07a62; color: #3a2414; }
+  .proj .now.warn { border-color: #f2b84b; box-shadow: 0 0 0 .3cqh #f2b84b, 0 0 3cqh rgba(242, 184, 75, .45); animation: warnbox 1.4s ease-in-out infinite alternate; }
+  @keyframes warnbox { to { box-shadow: 0 0 0 .3cqh #f2b84b, 0 0 5cqh rgba(242, 184, 75, .75); } }
+  .proj .now .warnt { margin-top: 1.2cqh; display: inline-flex; align-items: center; gap: 1cqh; padding: .6cqh 1.6cqh; border-radius: 99px;
+    background: #f2b84b; color: #3a2414; font-weight: 700; font-size: 2.4cqh; }
+  .proj .now .warnt svg, .proj .list .wi svg { width: 1.2em; height: 1.2em; flex: none; }
+  .proj .list .wi { display: inline-flex; vertical-align: -.2em; margin-left: .8cqh; color: #f2b84b; }
+  .proj .now .rejt { font-weight: 700; color: #ffb39c; font-size: 2.6cqh; text-transform: uppercase; letter-spacing: .15em; }
+  .proj .now.best { border-color: #ffd98f; box-shadow: 0 0 3cqh rgba(255, 210, 120, .35); }
+  .proj .list { display: flex; flex-direction: column; gap: .9cqh; overflow: hidden; }
+  .proj .list .li { display: grid; grid-template-columns: 1fr auto auto; gap: 1.4cqh; align-items: center; font-size: 2.3cqh; }
+  .proj .list .li .who { display: flex; flex-wrap: wrap; gap: .5cqh; min-width: 0; }
+  .proj .list .li .w { font-family: var(--tile); font-weight: 700; white-space: nowrap; }
+  .proj .list .li .w small { font-family: var(--head); font-weight: 500; color: rgba(253, 243, 226, .7); margin-right: .6cqh; }
+  .proj .list .li .p { font-family: var(--head); font-weight: 700; text-align: right; min-width: 6cqh; color: #ffd98f; }
+  .proj .list .li .p small { color: rgba(253, 243, 226, .7); font-weight: 500; font-size: 1.7cqh; margin-left: .5cqh; }
+  /* tabulka tahů: týmy | tah | body | % – pod řádkem přeškrtnuté neuznané tahy */
+  .proj .list .li { grid-template-columns: minmax(0, 1fr) auto 6cqh 7cqh; row-gap: .3cqh; font-size: 2.5cqh; padding: .6cqh 0; border-bottom: .15cqh solid rgba(253, 243, 226, .12); }
+  .proj .list .li .w small { display: inline-block; min-width: 4.6cqh; }
+  .proj .list .li .w .none { font-family: var(--head); font-weight: 500; color: rgba(253, 243, 226, .6); }
+  .proj .list .li .pc { text-align: right; font-family: var(--head); font-size: 1.9cqh; color: rgba(253, 243, 226, .7); }
+  .proj .list .li .rejl { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: .4cqh 2cqh; font-size: 1.9cqh; color: rgba(253, 243, 226, .6); }
+  .proj .list .li .rejl s { white-space: nowrap; text-decoration-color: #ff9c80; text-decoration-thickness: .25cqh; font-family: var(--tile); font-weight: 600; }
+  .proj .list .li .rejl small { margin-right: .6cqh; font-family: var(--head); font-weight: 500; }
+  .proj .list .li .rejl b { margin-left: .8cqh; font-family: var(--head); font-weight: 600; }
+  .proj .list .li.fresh { animation: appear .7s both; }
+
+  /* připojení */
+  .proj .join { display: flex; align-items: center; gap: 6cqw; }
+  .proj .qr { background: #fff; padding: 2.4cqh; border-radius: 2cqh; box-shadow: 0 1.4cqh 4cqh rgba(40, 18, 4, .45); }
+  .proj .qr img { display: block; width: 52cqh; height: 52cqh; image-rendering: pixelated; }
+  .proj .join .txt { display: flex; flex-direction: column; gap: 2.4cqh; max-width: 70cqh; }
+  .proj .join .code { font-family: var(--tile); font-weight: 800; font-size: 11cqh; letter-spacing: .12em; color: #ffe2a8; line-height: 1; }
+  .proj .join .url { font-size: 2.4cqh; color: rgba(253, 243, 226, .85); word-break: break-all; }
+  .proj .join .teams { display: flex; flex-wrap: wrap; gap: 1cqh; }
+  .proj .testnote { position: absolute; bottom: 2cqh; font-size: 1.8cqh; color: rgba(253, 243, 226, .7); }
+  .proj .corner { position: absolute; right: 2cqh; bottom: 1.6cqh; font-size: 1.8cqh; color: rgba(253, 243, 226, .6); }
+  .proj .logo { display: flex; gap: 1.2cqh; }
+  .proj .logo .rt { --cs: 13cqh; position: relative; width: var(--cs); height: var(--cs); }
+  .proj .logo .rt .tile { inset: 0; }
+
+  /* pořadí */
+  .proj .rank { width: min(84cqw, 150cqh); display: flex; flex-direction: column; gap: 1.5cqh; background: rgba(40, 18, 4, .35); border: .2cqh solid rgba(253, 243, 226, .2); border-radius: 2.4cqh; padding: 3cqh 3cqw; }
+  .proj .rank .row { display: grid; grid-template-columns: 5cqh 24cqw 1fr 11cqh; align-items: center; gap: 1.6cqw; font-size: 3cqh; }
+  .proj .rank .place { font-family: var(--head); font-weight: 700; color: rgba(253, 243, 226, .65); text-align: right; }
+  .proj .rank .row:first-child .place { color: #ffd98f; }
+  .proj .rank .name { overflow: hidden; }
+  .proj .rank .bar { height: 3.4cqh; border-radius: 99px; background: rgba(253, 243, 226, .1); overflow: hidden; display: flex; }
+  .proj .rank .bar > i { display: block; height: 100%; }
+  .proj .rank .bar > i.light { filter: brightness(1.45) saturate(.75); background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.22) 0 .6cqh, transparent .6cqh 1.2cqh) !important; }
+  .proj .rank .pts { font-family: var(--head); font-weight: 700; text-align: right; line-height: 1.15; }
+  .proj .rank .pts small { display: block; font-size: 1.6cqh; color: #ffd98f; font-weight: 600; }
+  .proj .rank .legend { display: flex; gap: 3cqw; justify-content: center; font-size: 1.8cqh; color: rgba(253, 243, 226, .7); margin-top: .6cqh; }
+  .proj .rank .legend span { display: flex; align-items: center; gap: .8cqh; }
+  .proj .rank .legend i { width: 4cqh; height: 1.8cqh; border-radius: 99px; background: #d9a86a; }
+  .proj .rank .legend i.light { filter: brightness(1.45) saturate(.75); background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.22) 0 .6cqh, transparent .6cqh 1.2cqh); }
+
+  /* přehled hry */
+  .proj .stage.ovs { justify-content: flex-start; gap: 2cqh; padding-top: 3cqh; }
+  .proj .ov { display: flex; gap: 2.5cqw; width: 100%; flex: 1; min-height: 0; align-items: flex-start; }
+  .proj .ovl { flex: 1; min-width: 0; }
+  .proj .ovr { width: 36cqw; display: grid; grid-template-columns: 1fr 1fr; gap: 1.4cqh; align-content: start; }
+  .proj .ovt col.lab { width: 12cqw; }
+  .proj .ovt tbody.recs th { color: #ffd98f; font-size: .85em; white-space: normal; line-height: 1.15; }
+  .proj .ovt tbody.recs td { background: rgba(40, 18, 4, .45); }
+  .proj .ovt tbody.recs td.best { box-shadow: inset 0 0 0 .25cqh #ffd98f; background: rgba(255, 217, 143, .18); }
+  .proj .ovt tr.gap td { background: transparent; height: 5cqh; padding: 0; }   /* tahy a rekordy zřetelně oddělené */
+  .proj .ovt tr.rec.hid { visibility: hidden; }
+  .proj .ovt tr.rec.appear { animation: appear .8s cubic-bezier(.2, 1.4, .4, 1) both; }
+  .proj .ovt .star7 { color: #ffd98f; font-size: .8em; }
+  .proj .ovt .rk { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; margin-right: .45em;
+    background: rgba(253, 243, 226, .18); color: rgba(253, 243, 226, .85); font-family: var(--head); font-weight: 700; font-size: .7em; vertical-align: .12em; }
+  .proj .ovt .medal { width: 1.45em; height: 1.8em; margin-right: .4em; vertical-align: -.45em; flex: none; }
+  .proj .ovt .rk { background: transparent; color: rgba(253, 243, 226, .55); width: 1.25em; margin-right: .4em; }
+  .proj .ovt tbody.recs td .cw + .cw { margin-top: .15em; }
+  .proj .ovt { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: .5cqh .35cqh; }
+  .proj .ovt th { font-family: var(--head); font-weight: 600; color: rgba(253, 243, 226, .6); text-align: right; padding: 0 .4em; white-space: nowrap; width: 3.2em; }
+  .proj .ovt tr.hd th { text-align: center; width: auto; padding-bottom: .6cqh; color: inherit; font-size: 1em; }
+  .proj .ovt td { background: rgba(40, 18, 4, .28); border-radius: .6cqh; padding: .2em .45em; white-space: nowrap; overflow: hidden; }
+  .proj .ovt td.empty { background: transparent; text-align: center; color: rgba(253, 243, 226, .25); }
+  .proj .ovt .cw { display: flex; justify-content: space-between; align-items: baseline; gap: .6em; }
+  .proj .ovt td b { font-family: var(--tile); font-weight: 600; letter-spacing: .02em; overflow: hidden; text-overflow: ellipsis; }
+  .proj .ovt td i { font-style: normal; font-family: var(--head); font-weight: 600; color: #ffd98f; }
+  .proj .ovt td.placed { box-shadow: inset 0 0 0 .25cqh #ffd98f; background: rgba(255, 217, 143, .14); }   /* položené slovo tahu */
+  /* součtový řádek výrazně: větší, plné pozadí, nejvyšší součet zlatě */
+  .proj .ovt tbody.sum th { color: #ffd98f; font-size: 1.4em; }
+  .proj .ovt tbody.sum td.top { background: #f1d9a8 !important; color: #3a2414 !important; }
+  .proj .ovt tbody.sum td { background: rgba(255, 217, 143, .22); font-family: var(--head); font-weight: 800; font-size: 1.4em; color: #ffe2a8; text-align: right; padding: .25em .5em; }
+  .proj .ovt tbody.sum tr > * { vertical-align: middle; line-height: 1.2; }
+  .proj .ovt tr.gap.sm td { height: .8cqh; }
+  .proj .ovt tbody.sum tr.gap td, .proj .ovt tbody.recs tr.gap td { background: transparent; padding: 0; font-size: 0; box-shadow: none; }   /* mezery neviditelné */
+  .proj .otile { background: rgba(40, 18, 4, .3); border-radius: 1.4cqh; padding: 1.2cqh 1.4cqh; }
+  .proj .otile h3 { margin: 0 0 .6cqh; font-family: var(--head); font-size: 1.45cqh; text-transform: uppercase; letter-spacing: .14em; color: #ffd98f; font-weight: 700; }
+  .proj .otile .tchip.sm { font-size: 1.35cqh; padding: .1cqh .8cqh; }
+  .proj .otile .tl { display: flex; align-items: center; gap: .8cqh; font-size: 1.8cqh; line-height: 1.55; white-space: nowrap; }
+  .proj .otile .tl b { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .proj .otile .tl b { font-family: var(--tile); font-weight: 600; }
+  .proj .otile .tl i { margin-left: auto; font-style: normal; font-family: var(--head); font-weight: 700; color: #ffd98f; white-space: nowrap; }
+  /* stupně vítězů */
+  .proj .podium { display: flex; align-items: flex-end; gap: 2cqw; }
+  .proj .step { display: flex; flex-direction: column; align-items: center; gap: 1cqh; width: 24cqw; }
+  .proj .step .names { display: flex; flex-direction: column; align-items: center; gap: .6cqh; }
+  .proj .step .hidden-name { font-family: var(--head); font-size: 5cqh; opacity: .45; }
+  .proj .step .block { width: 100%; border-radius: 1.6cqh 1.6cqh 0 0; display: flex; flex-direction: column; align-items: center; padding-top: 2cqh; font-family: var(--head); font-weight: 700; color: #3a2414; box-shadow: 0 1.4cqh 3.5cqh rgba(40, 18, 4, .5); }
+  .proj .step .block b { font-size: 9cqh; line-height: 1; }
+  .proj .step .block span { font-size: 2.6cqh; }
+  .proj .step.p1 .block { height: 34cqh; background: linear-gradient(#fff3c4, #e8c35a); }
+  .proj .step.p2 .block { height: 25cqh; background: linear-gradient(#ffffff, #cfd2d4); }
+  .proj .step.p3 .block { height: 18cqh; background: linear-gradient(#ffd9b8, #d48a4f); }
+  .proj .rest { font-size: 2.4cqh; display: flex; flex-wrap: wrap; justify-content: center; gap: 1cqh 3cqw; max-width: 90cqw; min-height: 3cqh; }
+  .proj .rest b { font-family: var(--head); opacity: .7; }
+</style>
+
+<!-- Styly jen pro pult -->
+<style>
+  button, input { font: inherit; color: inherit; }
+  header.top { display: flex; align-items: center; gap: 16px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5; }
+  header.top .brand { font-family: var(--tile); font-size: 24px; font-weight: 800; color: var(--acc); letter-spacing: .02em; }
+  header.top .brand small { font-family: var(--head); font-weight: 500; font-size: 15px; color: var(--muted); margin-left: 6px; }
+  header.top .info { color: var(--muted); font-size: 14px; }
+  header.top .info b { color: var(--text); }
+  header.top .spacer { flex: 1; }
+  main { display: grid; grid-template-columns: minmax(520px, 1fr) minmax(460px, 1fr); gap: 20px; padding: 20px 24px 40px; align-items: start; }
+  @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
+  .panel + .panel { margin-top: 20px; }
+  .panel h3 { margin: 0 0 4px; font-family: var(--head); font-weight: 600; font-size: 20px; }
+  .panel .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; line-height: 1.5; }
+  .steps { display: flex; gap: 6px; margin-bottom: 16px; }
+  .steps span { flex: 1; text-align: center; font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; padding: 7px 4px; border-radius: 8px; background: rgba(59, 42, 32, .05); color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .steps span.on { background: var(--acc); color: #fff8ee; }
+  .steps span.done { color: var(--ok); }
+  .steps span.skip { text-decoration: line-through; opacity: .5; }
+  .vopts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -6px 0 14px; font-size: 13px; color: var(--muted); }
+  .vopt { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: #fff; border-radius: 99px; padding: 3px 11px 3px 6px; font-size: 13px; cursor: pointer; color: var(--muted); }
+  .vopt i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); }
+  .vopt.on { color: var(--text); border-color: var(--acc); }
+  .vopt.on i { background: var(--acc); border-color: var(--acc); }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 16px; cursor: pointer; font-weight: 600; font-size: 14px; text-decoration: none; display: inline-block; color: var(--text); }
+  .tchip { display: inline-block; border: 2px solid #fff; border-radius: 99px; padding: 2px 10px; font-weight: 700; font-size: 13px; box-shadow: 0 0 0 1px rgba(59, 42, 32, .25); }
+  .btn:hover { background: #fbf2e8; }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: #fff8ee; }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn.ghost { background: transparent; }
+  .btn.small { padding: 5px 10px; font-size: 13px; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  .actions .spacer { flex: 1; }
+  .help { color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+  .proj-status { font-size: 13px; color: var(--muted); }
+  .proj-status.live { color: var(--ok); }
+  .seg { display: inline-flex; background: rgba(59, 42, 32, .05); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { border: 0; background: transparent; padding: 6px 12px; border-radius: 7px; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--acc); color: #fff8ee; }
+  .preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+  .preview-wrap .proj { position: absolute; inset: 0; }
+  .preview-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .preview-head h3 { margin: 0; flex: 1; }
+  .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px rgba(59, 42, 32, .35); }
+
+  /* týmy a jejich řešení */
+  .trow { display: grid; grid-template-columns: 14px 150px 1fr 44px; gap: 10px; align-items: center; padding: 7px 6px; border-bottom: 1px solid rgba(59, 42, 32, .07); border-radius: 8px; }
+  .trow.cur-row { background: var(--acc-soft); }
+  .trow { cursor: pointer; }
+  .trow .tn { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trow .tot { text-align: right; font-family: var(--head); font-weight: 700; }
+  .cands { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* semafor jako tlačítka; slovo, které nejde položit, přeškrtnuté */
+  .cand { border: 1px solid #d6cdc4; background: #ece6e0; color: #6f6259;
+    border-radius: 8px; padding: 3px 8px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+  .cand b { color: var(--muted); font-weight: 600; }
+  .cand .w { font-family: var(--tile); font-weight: 700; }
+  .cand .s { font-weight: 700; margin-left: 4px; }
+  .cand.bad { color: var(--muted); border-color: var(--line); text-decoration: line-through; background: #f4ece4; }
+  /* neposouzené šedě, uznané zeleně, ⚠ medově, neuznané červeně */
+  .trow.settled { opacity: .4; filter: grayscale(.7); }   /* tým vypořádaný (uznaný tah odsouhlasen Enterem) */
+  .trow.settled.cur-row { opacity: .7; }
+  .cand.ok { border-color: var(--ok); background: #e6ebd3; color: color-mix(in srgb, var(--ok) 65%, var(--text)); }
+  .cand.ok::before { content: '✓ '; font-weight: 700; }
+  .cand.warn { border-color: var(--honey); background: #fbefd3; color: color-mix(in srgb, var(--honey) 60%, var(--text)); }
+  .cand.warn::before { content: '⚠ '; font-weight: 700; }   /* ikona stavu vždy na začátku (✓ ⚠ ✕) */
+  .cand.no::before { content: '✕ '; font-weight: 700; text-decoration: none; display: inline-block; margin-right: 3px; }
+  .cand.no { border-color: var(--danger); color: var(--danger); text-decoration: line-through; background: #f8e3dd; }
+  .cand.cur { outline: 3px solid var(--text); outline-offset: 1px; }
+  .cand.same { outline: 2px dashed var(--text); outline-offset: 1px; }
+  .same-note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .none { color: var(--muted); font-size: 13px; font-style: italic; }
+  .detail { display: grid; grid-template-columns: auto 1fr; gap: 16px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); align-items: stretch; }
+  .detail .dright { display: flex; flex-direction: column; min-width: 0; }
+  .detail .dact { margin-top: auto; padding-top: 12px; }
+  .detail .words { font-size: 14px; line-height: 1.7; }
+  .detail .words .w { font-family: var(--tile); font-weight: 700; }
+  .prem { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 0 6px; border-radius: 5px; line-height: 1.6; margin-left: 3px; white-space: nowrap; }
+  .pu { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 3px; }
+  .pu.TW { text-decoration-color: #c8473b; } .pu.DW { text-decoration-color: #f0aa9e; }
+  .pu.TL { text-decoration-color: #3f78b5; } .pu.DL { text-decoration-color: #a9d1e7; }
+  .prem.TW { background: #c8473b; color: #fff; } .prem.DW { background: #f0aa9e; color: #8a2f25; }
+  .prem.TL { background: #3f78b5; color: #fff; } .prem.DL { background: #a9d1e7; color: #24506d; }
+  .detail .err { color: var(--danger); font-size: 14px; }
+  .detail .flags { display: flex; gap: 6px; margin: 0 0 12px; flex-wrap: wrap; }   /* krátké texty → 4 na jednom řádku */
+  .detail .flags .flagbtn { white-space: nowrap; }
+  .flagbtn:disabled { opacity: .35; }
+  /* decentní semafor: každé tlačítko v barvě svého stavu, zvolené plné */
+  .flagbtn { --fc: var(--ok); color: color-mix(in srgb, var(--fc) 80%, var(--text)); border-color: color-mix(in srgb, var(--fc) 45%, #fff); }
+  .flagbtn[data-flag=""] { --fc: #8d8078; }
+  .flagbtn[data-flag="ok"] { --fc: var(--ok); }
+  .flagbtn[data-flag="warn"] { --fc: var(--honey); }
+  .flagbtn[data-flag="no"] { --fc: var(--danger); }
+  .flagbtn:hover { background: color-mix(in srgb, var(--fc) 10%, #fff); }
+  .flagbtn.on, .flagbtn.on:hover { background: var(--fc); border-color: var(--fc); color: #fff8ee; }
+  .clockline { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+  .addtime { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; color: var(--muted); font-size: 13px; }
+  .addtime .btn { padding: 4px 9px; }
+  .clockline .big.paused { color: var(--muted); }
+  .clockline .big { font-family: var(--head); font-weight: 700; font-size: 34px; font-variant-numeric: tabular-nums; }
+  .rackline { display: flex; gap: 6px; align-items: center; margin-bottom: 12px; }
+  .rackline .rt { --cs: 40px; position: relative; width: 40px; height: 40px; }
+  .rackline .rt .tile { inset: 0; }
+  .team-row { display: grid; grid-template-columns: 14px minmax(110px, 180px) 1fr auto auto; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(59, 42, 32, .07); }
+  input.name-in { width: 100%; padding: 4px 6px; margin-left: -6px; border-radius: 6px; border: 1px solid transparent; background: transparent; font-weight: 600; }
+  input.name-in:hover { border-color: var(--line); }
+  input.name-in:focus, input.note-in:focus { border-color: var(--acc); outline: none; background: #fff; }
+  input.note-in { width: 100%; padding: 4px 8px; border-radius: 6px; border: 1px dashed var(--line); background: transparent; font-size: 13.5px; color: var(--muted); }
+  input.note-in:hover { border-style: solid; }
+  input.note-in:focus { color: var(--text); border-style: solid; }
+  .trow .tn small { display: block; font-weight: 400; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+  .team-del { border: 0; background: transparent; color: var(--muted); font-size: 18px; cursor: pointer; padding: 0 4px; border-radius: 6px; }
+  .team-del:hover { color: var(--danger); }
+  .out-tag { font-size: 12px; color: var(--muted); }
+  input.num { width: 70px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: #fff; text-align: center; font-weight: 600; }
+  .set-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 14px; }
+  .set-row label { flex: 1; }
+  table.score { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.score th, table.score td { padding: 6px; text-align: right; border-bottom: 1px solid rgba(59, 42, 32, .07); }
+  table.score th { font-weight: 600; color: var(--muted); font-size: 12px; }
+  table.score td:first-child, table.score th:first-child { text-align: left; }
+  .hist { margin-top: 14px; font-size: 13.5px; line-height: 1.7; max-height: 260px; overflow-y: auto; }
+  .hist .w { font-family: var(--tile); font-weight: 700; }
+  kbd { background: #fff; border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .keytip { position: relative; display: inline-block; vertical-align: -.32em; line-height: 0; margin-left: 4px; outline: none; }
+  .keytip .qm { display: block; color: color-mix(in srgb, var(--muted) 55%, var(--text)); cursor: help; }
+  .keytip .qm svg { display: block; width: 1.3em; height: 1.3em; }
+  .keytip:hover .qm, .keytip:focus-within .qm { color: var(--acc); }
+  .keytip .tippop { display: none; position: absolute; left: -6px; top: 24px; z-index: 20; width: max-content; max-width: min(440px, 80vw); line-height: 1.5;
+    grid-template-columns: auto auto; gap: 6px 14px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(59, 42, 32, .2); padding: 8px 12px; font-size: 13.5px; color: var(--text); font-weight: 400; font-family: var(--sans); }
+  .keytip:hover .tippop, .keytip:focus-within .tippop { display: grid; }
+  .keytip .tippop > span:nth-child(odd) { white-space: nowrap; }
+  h3 .keytip { font-size: 14px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="pismena.js"></script>
+<script src="mobil/config.js"></script>
+<script src="mobil/hra.js"></script>
+<script src="mobil/net.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+<script>
+'use strict';
+
+/* ================= Konstanty ================= */
+
+const L = ScrabLogic;
+const LET = L.parseLetters(window.SCRABBLE_PISMENA);
+const VALS = LET.vals;
+const STORAGE_KEY = 'scrabble-opis-v1';
+const PING_KEY = 'scrabble-opis-projekce-ping';
+const IS_PROJECTION = location.hash === '#projekce';
+const DEFAULTS = { time: 180, pct: true, rank: true, bonus: 50, vc: true };
+// teplé, dobře rozlišitelné barvy týmů (bez modré)
+const TEAM_COLORS = ['#c4643c', '#7d8c55', '#b07a1f', '#8e5a8a', '#e08a3c', '#4f7d6b', '#a8463f', '#c9a227', '#d4787a', '#6b5b45', '#5c8a3a', '#9a6a4a'];
+
+/* ================= Stav hry =================
+  state = {
+    code,                                   // kód hry pro mobily
+    teams: [{ uid, name, color, out }],     // tým = jeden mobil (uid)
+    settings: { time, pct, bonus, vc },
+    bag: [kameny v sáčku], board: [225 polí],
+    turns: [{ no, rack, board0, bag0, keepN, redrawn, phase, endsAt,
+              moves: { uid: [{ pos, word }] },   // řešení týmu v jeho pořadí (první = TOP)
+              flags: { klíč: 'warn'|'no' },      // ⚠ pochybnost / neuznáno (platí pro všechny týmy se stejným tahem)
+              shown: [klíče odhalených tahů], placed, pts, bingo, top, done, over }],
+    phase: 'join' | 'game' | 'final', revealed, view
+  }
+  fáze tahu: ready (vylosováno) → think (běží čas) → check (kontrola) → reveal (odhalování)
+             → placed (nejlepší tah na desce) → rank (pořadí)
+*/
+let state = load();
+
+function load() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch { return null; } }
+function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch { } }
+
+function fullBag() { const b = []; LET.letters.forEach(x => { for (let k = 0; k < x.n; k++) b.push(x.l); }); return b; }
+function freshState(code, teams, settings) {
+  return { code, teams: teams || [], settings: { ...DEFAULTS, ...(settings || {}) }, bag: fullBag(),
+    board: Array(225).fill(''), turns: [], phase: 'join', revealed: 0, view: 'auto' };
+}
+const cur = () => state.turns[state.turns.length - 1];
+const active = () => state.teams.filter(t => !t.out);
+const teamBy = uid => state.teams.find(t => t.uid === uid);
+
+/* ================= Pomocné ================= */
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function textOn(hex) {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? '#2b1a0e' : '#fff';
+}
+const teamChip = (team, size = '') => team
+  ? `<span class="tchip ${size}" style="background:${team.color};color:${textOn(team.color)}">${esc(team.name)}</span>` : '';
+const fmtTime = ms => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const pw = n => n === 1 ? 'bod' : n > 1 && n < 5 ? 'body' : 'bodů';
+const kw = n => n === 1 ? 'kámen' : n > 1 && n < 5 ? 'kameny' : 'kamenů';
+const now = () => ScrabNet.now();
+const OK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
+const NO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>';
+const WARN_SVG ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 2.5 20h19z"/><path d="M12 10v4.5M12 17.4v.1"/></svg>';
+const rackTile =(t, cls = '', style = '') => `<div class="rt ${cls}">${L.tileHtml(t, VALS, '', style)}</div>`;
+const boardHtml = (board, bs, opts) => L.boardHtml(board, bs, VALS, opts);
+
+/* ================= Vyhodnocení tahů ================= */
+
+const evalCache = new Map();
+function evalCand(t, c) {
+  const k = `${t.no}|${t.board0.length}|${t.rack.join('')}|${c.pos}|${c.word}|${state.settings.bonus}`;
+  if (!evalCache.has(k)) evalCache.set(k, L.evaluate(L.boardFromStr(t.board0), t.rack, c.pos, c.word, VALS, state.settings.bonus));
+  return evalCache.get(k);
+}
+// značka platí pro tah (pozice + slovo) – stejný tah víc týmů se posuzuje jednou pro všechny
+const fl = (t, uid, key) => t.flags[key] || '';
+const groupFlag = (t, key) => t.flags[key] || '';
+/* Odevzdaný tah týmu = první řešení v jeho pořadí, které jde položit.
+   Během času a kontroly jsou značky jen signál (✕ = „hledejte dál“), nic nevyřazují; rozhoduje se
+   společně až při odhalování – teprve tam ✕ tah vyřadí a nastoupí další řešení týmu. */
+const finalPhase = t => ['reveal', 'placed', 'rank'].includes(t.phase);
+function teamMove(t, uid) {
+  const list = t.moves[uid] || [];
+  for (let i = 0; i < list.length; i++) {
+    const e = evalCand(t, list[i]);
+    // ✕ vyřadí slovo až po jeho odhalení (při odhalování se o něm teprve rozhoduje); po položení vždy
+    const out = finalPhase(t) && fl(t, uid, e.key) === 'no' && (t.phase !== 'reveal' || t.shown.includes(e.key));
+    if (e.ok && !out) return { ...e, idx: i };
+  }
+  return null;
+}
+// stejné tahy víc týmů = jedna skupina
+function groups(t) {
+  const m = new Map();
+  active().forEach(team => {
+    const e = teamMove(t, team.uid);
+    if (!e) return;
+    if (!m.has(e.key)) m.set(e.key, { ev: e, uids: [] });
+    m.get(e.key).uids.push(team.uid);
+  });
+  return [...m.values()];
+}
+// tah podle klíče (i zamítnutý) + týmy, které ho mají mezi řešeními
+function findMove(t, key) {
+  let ev = null; const uids = [];
+  active().forEach(team => (t.moves[team.uid] || []).forEach(c => {
+    const e = evalCand(t, c);
+    if (e.ok && e.key === key) { ev = ev || e; if (!uids.includes(team.uid)) uids.push(team.uid); }
+  }));
+  return ev ? { ev, uids } : null;
+}
+// odhaluje se odevzdané slovo každého týmu (i s ✕) a k tomu platný tah, který za neuznané nastoupí
+function revealPool(t) {
+  const m = new Map();
+  // každý tým nejdřív se svým prvním slovem; další nastoupí, až když odhalené slovo neuznáš
+  active().forEach(team => { const e = teamMove(t, team.uid); if (e && !m.has(e.key)) m.set(e.key, e); });
+  return [...m.values()];
+}
+const nextToReveal = t => revealPool(t).sort((a, b) => L.compareMoves(b, a)).map(ev => ({ ev })).find(g => !t.shown.includes(g.ev.key));
+
+function rackAfter(t) {
+  const r = t.rack.slice();
+  (t.placed?.tiles || []).forEach(x => { const k = r.indexOf(L.isBlank(x.t) ? '?' : x.t); if (k >= 0) r.splice(k, 1); });
+  return r;
+}
+
+function totals() {
+  const s = {}, b = {};
+  state.teams.forEach(t => { s[t.uid] = 0; b[t.uid] = 0; });
+  state.turns.filter(t => t.done).forEach(t => {
+    for (const u in t.pts) { s[u] = (s[u] || 0) + t.pts[u]; b[u] = (b[u] || 0) + (t.bingo[u] || 0); }
+  });
+  return { s, b };
+}
+function pctOf(uid) {
+  let a = 0, top = 0;
+  state.turns.filter(t => t.done).forEach(t => { top += t.top; a += t.pts[uid] || 0; });
+  return top ? Math.round(a / top * 1000) / 10 : 0;
+}
+const pctStr = p => String(p).replace('.', ',') + ' %';
+// hustý ranking (1, 2, 3, 3, 4)
+function placing() {
+  const { s } = totals();
+  const ranked = active().map(t => ({ uid: t.uid, pts: s[t.uid] || 0 })).sort((a, b) => b.pts - a.pts);
+  const scores = [...new Set(ranked.map(x => x.pts))];
+  ranked.forEach(x => x.place = scores.indexOf(x.pts) + 1);
+  return { ranked, places: scores.length };
+}
+
+/* ================= Losování =================
+   Zásobník se vždy doplní na 7. V prvních 15 tazích aspoň 2 samohlásky a 2 souhlásky,
+   pak aspoň 1 + 1 (žolík platí za obojí); jinak se všech 7 kamenů vrátí a losuje se znovu. */
+function vcOk(rack, need) {
+  const v = rack.filter(x => x === '?' || L.isVowel(x)).length;
+  const c = rack.filter(x => x === '?' || !L.isVowel(x)).length;
+  return v >= need && c >= need;
+}
+function drawRack(bag, keep, no) {
+  bag = bag.slice();
+  let rack = keep.slice(), redrawn = 0;
+  const need = state.settings.vc ? (no <= 15 ? 2 : 1) : 0;
+  const fill = () => { while (rack.length < 7 && bag.length) rack.push(bag.splice(Math.floor(Math.random() * bag.length), 1)[0]); };
+  fill();
+  // podmínka jde splnit jen tehdy, když na ni zbylé kameny vůbec stačí
+  const pool = () => bag.concat(rack);
+  const possible = () => pool().length <= 7 ? vcOk(pool(), need) : vcOk(pool().filter(x => x === '?' || L.isVowel(x)).slice(0, need).concat(pool().filter(x => x === '?' || !L.isVowel(x)).slice(0, need)), need);
+  while (need && !vcOk(rack, need) && possible() && redrawn < 200) { bag.push(...rack); rack = []; fill(); redrawn++; }
+  return { bag, rack, redrawn };
+}
+
+function startTurn() {
+  const prev = cur();
+  const no = state.turns.length + 1;
+  const bag0 = state.bag.slice();
+  // po kroku Zpět z vylosovaného tahu se vrátí tentýž zásobník (pokud se mezitím nic nezměnilo)
+  // zapamatované zásobníky každého tahu zvlášť (i při návratu o víc tahů)
+  const store = state.redo && !('no' in state.redo) ? state.redo : (state.redo = {});
+  const r = store[no];
+  delete store[no];
+  if (r && r.board0 === L.boardToStr(state.board) && r.bag0 === bag0.join(',')) {
+    state.bag = r.bagAfter;
+    state.turns.push({ ...r.turn, phase: 'ready', endsAt: null, paused: null, drawnAt: Date.now(), shown: [], placed: null,
+      pts: {}, bingo: {}, top: 0, done: false, over: false, settled: {} });
+    cursor.row = 0; cursor.col = 0; cursor.uid = null;
+    return;
+  }
+  let bag = state.bag.slice(), keep = [];
+  if (prev) {
+    if (prev.placed) keep = rackAfter(prev);
+    else { bag.push(...prev.rack); }   // nikdo nic nepoložil → nový zásobník
+  }
+  const d = drawRack(bag, keep, no);
+  state.bag = d.bag;
+  state.turns.push({ no, rack: d.rack, board0: L.boardToStr(state.board), bag0, keepN: d.redrawn ? 0 : keep.length, redrawn: d.redrawn,
+    phase: 'ready', endsAt: null, drawnAt: Date.now(), moves: {}, flags: {}, shown: [], placed: null, pts: {}, bingo: {}, top: 0, done: false, over: false });
+  cursor.row = 0; cursor.col = 0; cursor.uid = null;
+}
+
+/* Zvuk losování: tiché dřevěné „klap“ při dopadu každého kamene (hraje pult – stejný počítač
+   jako projekce). Nic se neplánuje dopředu v audiu: každé klapnutí spustí časovač až ve svou chvíli
+   a jen dokud je tah ve fázi losování – jinak dřív doznívalo do běžícího času a znělo „nahodile“. */
+let actx = null, drawTimers = [];
+function klap() {
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state !== 'running') return;                 // bez povolení zvuku nic nečekat a nehromadit
+    const len = Math.floor(actx.sampleRate * .07), buf = actx.createBuffer(1, len, actx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+    const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+    src.buffer = buf; f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 3; g.gain.value = .6;
+    src.connect(f).connect(g).connect(actx.destination);
+    src.start();
+  } catch { }
+}
+// odpočet: posledních 10 s krátké tiknutí, na konci času gong
+function tone(freqs, dur, vol, type = 'sine') {
+  try {
+    actx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state !== 'running') return;
+    const t0 = actx.currentTime;
+    freqs.forEach((f, i) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = type; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(vol / (i + 1), t0 + .01);
+      g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+      o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + .05);
+    });
+  } catch { }
+}
+const tickSound = last => tone([last ? 1320 : 990], .12, .18, 'triangle');
+const gongSound = () => tone([196, 392, 588, 784], 3.2, .35);
+let lastBeep = null;
+// prohlížeč pustí zvuk až po interakci – při první klávese / kliknutí v pultu zvuk odemknout
+['keydown', 'pointerdown'].forEach(ev => document.addEventListener(ev, () => {
+  if (IS_PROJECTION) return;
+  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); if (actx.state !== 'running') actx.resume(); } catch { }
+}, true));
+function countdownSounds(t) {
+  if (state.phase !== 'game' || t?.phase !== 'think' || t.paused != null) { lastBeep = null; return; }
+  const s = Math.ceil((t.endsAt - now()) / 1000);
+  if (s === lastBeep) return;
+  if (lastBeep === s + 1 && s >= 1 && s <= 10) tickSound(s <= 3);   // jen plynulé odpočítávání, ne skok času
+  lastBeep = s;
+}
+// položení výherního slova: kameny ťuknou za sebou a zazní vzestupný akord (jen když se něco položilo)
+function placeSound(t) {
+  if (!t.placed) return;
+  const n = t.placed.tiles.length;
+  for (let k = 0; k < n; k++) setTimeout(klap, k * 140);
+  setTimeout(() => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone([f, f * 2], .9, .22), i * 110)), n * 140 + 120);
+}
+function stopDrawSounds() { drawTimers.forEach(clearTimeout); drawTimers = []; }
+function drawSounds(t) {
+  stopDrawSounds();
+  try { actx ||= new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch { }
+  const n = t.rack.length - t.keepN;
+  for (let k = 0; k < n; k++) drawTimers.push(setTimeout(() => { if (cur() === t && t.phase === 'ready') klap(); },
+    (k * DRAW_STEP + DRAW_FLIP * .3) * 1000));
+}
+
+function placeBest(t) {
+  const best = groups(t).sort((a, b) => L.compareMoves(a.ev, b.ev))[0];
+  t.pts = {}; t.bingo = {};
+  active().forEach(team => { const m = teamMove(t, team.uid); t.pts[team.uid] = m ? m.score : 0; t.bingo[team.uid] = m ? m.bingo : 0; });
+  t.top = best ? best.ev.score : 0;
+  t.placed = best ? { key: best.ev.key, tiles: best.ev.tiles, pos: best.ev.pos, main: best.ev.main, score: best.ev.score,
+    words: best.ev.words.map(w => ({ w: w.w, s: w.s })), bingo: best.ev.bingo, uids: best.uids } : null;
+  if (best) state.board = L.applyMove(state.board, best.ev.tiles);
+  t.phase = 'placed'; t.done = true;
+  // konec: sáček je prázdný a nikdo nic nepoložil (nebo došly všechny kameny)
+  t.over = !state.bag.length && (!t.placed || !rackAfter(t).length);
+}
+
+/* ================= Spojení s mobily ================= */
+
+let live = {}, unwatch = null, dirty = false, lastMeta = '', lastFlags = '', myUid = null;
+function connect() {
+  unwatch?.();
+  if (!state.code) return;
+  unwatch = ScrabNet.watch(state.code, tree => { live = tree || {}; absorb(); });
+}
+const arr = x => Array.isArray(x) ? x.filter(Boolean) : x ? Object.values(x) : [];
+function absorb() {
+  let changed = false;
+  const teams = live.teams || {};
+  for (const uid in teams) {
+    const t = teamBy(uid), name = String(teams[uid]?.name || '').trim() || 'Tým';
+    if (!t) { state.teams.push({ uid, name, color: freeColor(), out: false }); changed = true; }
+    else if (t.name !== name) { t.name = name; changed = true; }
+  }
+  const t = cur();
+  if (state.phase === 'game' && t?.phase === 'think') changed = copyMoves(t) || changed;
+  if (changed) { save(); if (editing()) dirty = true; else renderAll(); }
+}
+function copyMoves(t) {
+  let changed = false;
+  const mv = live.moves?.[t.no] || {};
+  for (const uid in mv) {
+    const list = arr(mv[uid]?.list).map(c => ({ pos: String(c.pos || ''), word: String(c.word || '') }));
+    if (JSON.stringify(list) !== JSON.stringify(t.moves[uid] || [])) { t.moves[uid] = list; changed = true; }
+  }
+  return changed;
+}
+function freeColor() {
+  const used = new Set(state.teams.map(t => t.color));
+  return TEAM_COLORS.find(c => !used.has(c)) || TEAM_COLORS[state.teams.length % TEAM_COLORS.length];
+}
+function metaPhase() {
+  if (state.phase === 'join') return 'join';
+  if (state.phase === 'final') return 'end';
+  const p = cur()?.phase;
+  return p === 'ready' || p === 'think' ? p : 'closed';
+}
+function publish() {
+  if (!state.code) return;
+  const t = cur();
+  const res = {};
+  if (t?.done) {
+    const { s } = totals(), pl = placing().ranked;
+    active().forEach(team => res[team.uid] = [t.pts[team.uid] || 0, s[team.uid] || 0, pl.find(x => x.uid === team.uid)?.place || 0]);
+  }
+  const meta = { owner: myUid, phase: metaPhase(), turn: t ? t.no : 0, board: L.boardToStr(state.board), rack: t ? t.rack : [], vals: VALS,
+    left: t?.placed ? rackAfter(t) : null,   // zbylé kameny po položení tahu
+    board0: t ? t.board0 : '',               // deska na začátku tahu – podle ní se hodnotí návrhy (i po položení)
+    // při pauze dostanou mobily vzdálený konec (ukládat jde dál) a zbývající čas zvlášť
+    endsAt: t?.paused != null ? Date.now() + 864e5 : t?.endsAt || 0, paused: t?.paused ?? null,
+    // definitivně neuznané tahy (odhalené s ✕, po položení všechny ✕) – mobil podle nich posune „odevzdáváme“
+    out: t && finalPhase(t) ? Object.keys(t.flags).filter(k => t.flags[k] === 'no' && (t.phase !== 'reveal' || t.shown.includes(k))) : [], time: state.settings.time, bag: state.bag.length, bonus: state.settings.bonus, res,
+    best: t?.done && t.placed ? { pos: t.placed.pos, word: t.placed.main, score: t.placed.score } : null };
+  const js = JSON.stringify(meta);
+  if (js !== lastMeta) { lastMeta = js; ScrabNet.set(state.code, 'meta', meta); }
+  if (t) {
+    const fj = t.no + JSON.stringify(t.flags);
+    if (fj !== lastFlags) { lastFlags = fj; ScrabNet.set(state.code, `flags/${t.no}`, Object.keys(t.flags).length ? t.flags : null); }
+  }
+}
+const editing = () => ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+document.addEventListener('focusout', () => setTimeout(() => { if (dirty && !editing()) { dirty = false; renderAll(); } }, 0));
+// adresa pro mobily (QR): běží-li pult z webu, odvodí se sama (mobil/ vedle pultu); jinak SCRABBLE_URL
+const joinUrl = () => ScrabNet.mode === 'test' || location.protocol.startsWith('http') || !window.SCRABBLE_URL
+  ? new URL(`mobil/index.html?r=${state.code}`, location.href).href
+  : `${window.SCRABBLE_URL}?r=${state.code}`;
+
+function commit() { state.off = now() - Date.now(); save(); publish(); renderAll(); }
+
+/* ================= Projekce ================= */
+
+const seen = {};
+function freshly(key, shown) { const was = seen[key]; seen[key] = shown; return shown && was === false ? 'appear' : ''; }
+
+function projectionHtml() {
+  if (!state) return logoStage();
+  if (state.view === 'pause') return logoStage();
+  if (state.view === 'join' || state.phase === 'join') return joinStage();
+  if (state.view === 'overview') return overviewStage();
+  if (state.phase === 'final') return finalStage();
+  if (state.view === 'rank') return rankStage();
+  const t = cur();
+  if (!t) return joinStage();
+  if (t.phase === 'rank') return rankStage();
+  return gameStage(t);
+}
+
+const logoStage = () => `<div class="stage"><div class="logo">${[...'SCRABBLE'].map(ch => rackTile(ch)).join('')}</div>
+  <div class="kicker">opisovaná varianta</div></div>`;
+
+function qrImg(text) {
+  try { const qr = qrcode(0, 'M'); qr.addData(text); qr.make(); return `<img src="${qr.createDataURL(8, 0)}" alt="QR">`; }
+  catch { return '<div style="width:52cqh;height:52cqh;display:grid;place-items:center;color:#3a2414;font-size:2.4cqh">QR kód se nenačetl</div>'; }
+}
+function joinStage() {
+  if (!state.code) return logoStage();
+  const teams = active();
+  return `<div class="stage"><div class="join">
+    <div class="qr">${qrImg(joinUrl())}</div>
+    <div class="txt">
+      <div class="kicker">Scrabble · opis</div>
+      <h1 style="text-align:left">Připojte se jedním mobilem za tým</h1>
+      <div><div class="url">Kód hry</div><div class="code">${esc(state.code)}</div></div>
+      <div class="teams">${teams.map(t => `<span class="${freshly('j' + t.uid, true)}">${teamChip(t)}</span>`).join('')}</div>
+    </div></div>
+    ${ScrabNet.mode === 'test' ? '<div class="testnote">Testovací režim – QR kód vede jen na tento počítač</div>' : ''}</div>`;
+}
+
+const DRAW_STEP = 0.9, DRAW_FLIP = 1.5;
+function drawTiming(t) {
+  const n = t.rack.length - t.keepN;
+  const total = Math.max(0, n - 1) * DRAW_STEP + DRAW_FLIP;
+  const el = t.drawnAt ? (Date.now() - t.drawnAt) / 1000 : 1e9;
+  return { on: t.phase === 'ready' && n > 0 && el < total + .3, el, total };
+}
+
+function gameStage(t) {
+  const board = t.phase === 'placed' ? state.board : L.boardFromStr(t.board0);
+  // naposledy položený tah zůstane zvýrazněný, dokud nepřijde další
+  const lastT = t.phase === 'placed' ? t : [...state.turns].reverse().find(x => x !== t && x.placed);
+  const last = new Set(t.phase === 'placed' && !t.placed ? [] : (lastT?.placed?.tiles || []).map(x => x.i));
+  let ghost = null, side = '';
+  const shownKey = t.shown[t.shown.length - 1];
+  if (t.phase === 'reveal' && shownKey) {
+    const m = findMove(t, shownKey);
+    if (m) { const g = groupFlag(t, shownKey, m.uids); ghost = { tiles: m.ev.tiles, color: teamBy(m.uids[0])?.color || '#c4643c', rej: g === 'no', warn: g === 'warn' }; }
+  }
+  const usedRack = t.phase === 'placed' && t.placed ? (() => {
+    const left = rackAfter(t), used = new Set(); const r = t.rack.slice();
+    left.forEach(x => { const k = r.findIndex((y, j) => y === x && !used.has(j)); if (k >= 0) used.add(k); });
+    return t.rack.map((_, j) => !used.has(j));
+  })() : null;
+  // slavnostní losování: nové kameny jeden po druhém vypadnou rubem nahoru a otočí se;
+  // časy se počítají od okamžiku losování, takže překreslení animaci nerestartuje
+  const draw = drawTiming(t);
+  const rack = t.rack.map((x, j) => {
+    if (!draw.on || j < t.keepN) return rackTile(x, usedRack?.[j] ? 'used' : '');
+    const d = (j - t.keepN) * DRAW_STEP - draw.el;
+    return `<div class="rt flip" style="--d:${d.toFixed(2)}s"><div class="card"><div class="back"></div>${L.tileHtml(x, VALS)}</div></div>`;
+  }).join('');
+
+  if (t.phase === 'ready') {
+    const after = t.redrawn ? 'Losovalo se znovu – málo samohlásek nebo souhlásek' : 'Za chvíli začne čas';
+    side = `<div class="clock"><b>${fmtTime(state.settings.time * 1000)}</b>${draw.on
+      ? `<span class="swap" style="--d:${(draw.total - draw.el).toFixed(2)}s"><i>Losujeme kameny…</i><i>${after}</i></span>` : `<span>${after}</span>`}</div>`;
+  } else if (t.phase === 'think') {
+    const n = active().filter(team => (t.moves[team.uid] || []).length).length;
+    side = t.paused != null ? `<div class="clock paused"><b>${fmtTime(t.paused)}</b><span>Čas je pozastavený</span></div>`
+      : `<div class="clock"><b data-timer-end="${t.endsAt - (state.off || 0)}">${fmtTime(t.endsAt - now())}</b>
+      <span>Řešení má ${n} z ${active().length} ${active().length < 5 ? 'týmů' : 'týmů'}</span></div>`;
+  } else if (t.phase === 'check') {
+    side = `<div class="big-msg">Čas vypršel<br><span style="font-size:3cqh;font-weight:400">Kontrolujeme řešení…</span></div>`;
+  } else if (t.phase === 'reveal' || t.phase === 'placed') {
+    side = revealSide(t, shownKey);
+  }
+  return `<div class="game">
+    ${boardHtml(board, '92cqh', { ghost, last })}
+    <div class="side">
+      <div class="top"><div class="kicker">Tah ${t.no}</div><div class="bag">V sáčku ${state.bag.length} ${kw(state.bag.length)}</div></div>
+      <div class="rack ${draw.on ? 'drawing' : ''}" style="--d:${(draw.total - draw.el).toFixed(2)}s">${rack}</div>
+      ${side}
+    </div>
+    <div class="corner">Kód ${esc(state.code || '')}</div>
+  </div>`;
+}
+
+function revealSide(t, shownKey) {
+  const pct = state.settings.pct;
+  let now = '';
+  if (t.phase === 'placed') {
+    if (t.placed) {
+      const chips = t.placed.uids.map(u => teamChip(teamBy(u), 'sm')).join('');
+      now = `<div class="now best"><div class="kicker" style="font-size:1.8cqh;margin-bottom:1cqh">Na desku jde nejlepší tah</div>
+        <div class="chips">${chips}</div>
+        <div class="mv"><small>${t.placed.pos}</small>${esc(t.placed.main)}</div>
+        <div class="pts">${t.placed.score} ${pw(t.placed.score)}${t.placed.bingo ? ` <small>vč. ${t.placed.bingo} za všech 7 kamenů</small>` : ''}</div></div>`;
+    } else now = `<div class="now"><div class="mv" style="font-size:3.6cqh">Nikdo nic nepoložil</div></div>`;
+  } else if (shownKey) {
+    const m = findMove(t, shownKey);
+    if (m) {
+      const g = groupFlag(t, shownKey, m.uids), rej = g === 'no', warn = g === 'warn';
+      const uids = rej ? m.uids : m.uids.filter(u => fl(t, u, shownKey) !== 'no');
+      // stejné rozložení pro všechny stavy: týmy · slovo · body · štítek stavu (místo drží i bez stavu)
+      const st = { ok: [OK_SVG, 'Uznáno'], warn: [WARN_SVG, 'Posuzujeme'], no: [NO_SVG, 'Neuznáno'] }[g];
+      now = `<div class="now st-${g || 'none'}"><div class="chips">${uids.map(u => teamChip(teamBy(u), 'sm')).join('')}</div>
+        <div class="mv"><small>${m.ev.pos}</small>${esc(m.ev.main)}</div>
+        <div class="pts">${m.ev.score} ${pw(m.ev.score)}</div>
+        <div class="stt">${st ? `${st[0]} ${st[1]}` : '&nbsp;'}</div></div>`;
+    }
+  } else now = `<div class="big-msg">Odhalujeme tahy<br><span style="font-size:3cqh;font-weight:400">od nejslabšího po nejlepší</span></div>`;
+  // seznam dosud odhalených tahů (nejlepší nahoře)
+  // každý tým jen jednou: jeho platný (odhalený) tah a před ním přeškrtnutá neuznaná slova;
+  // týmy se stejným platným tahem i stejnými neuznanými slovy sdílí řádek
+  const rows = new Map();
+  active().forEach(team => {
+    const list = t.moves[team.uid] || [];
+    const rejKeys = t.shown.filter(k => t.flags[k] === 'no' && list.some(c => evalCand(t, c).key === k));
+    const valid = teamMove(t, team.uid);
+    const shownValid = valid && t.shown.includes(valid.key) ? valid : null;
+    if (!shownValid && !rejKeys.length && t.phase !== 'placed') return;
+    const id = (shownValid ? shownValid.key : valid ? '…' : '–') + '|' + rejKeys.join(',');
+    if (!rows.has(id)) rows.set(id, { uids: [], ev: shownValid, pending: !!valid && !shownValid, rej: rejKeys.map(k => findMove(t, k)?.ev).filter(Boolean) });
+    rows.get(id).uids.push(team.uid);
+  });
+  const top = t.phase === 'placed' ? t.top : Math.max(0, ...[...rows.values()].filter(r => r.ev).map(r => r.ev.score));
+  const sorted = [...rows.values()].sort((a, b) => (!a.ev) - (!b.ev) || (a.ev && b.ev ? L.compareMoves(a.ev, b.ev) : 0));
+  const list = sorted.map(r => {
+    const warn = r.ev && t.flags[r.ev.key] === 'warn' && t.phase === 'reveal';
+    // sloupce: týmy | tah (pozice + slovo) | body | %; neuznané tahy na řádku pod tím, přeškrtnuté i s body
+    const pc = pct && r.ev && t.phase === 'placed' && top ? `${Math.round(r.ev.score / top * 100)} %` : '';
+    const word = r.ev ? `<small>${r.ev.pos}</small>${esc(r.ev.main)}${warn ? `<span class="wi">${WARN_SVG}</span>` : ''}`
+      : `<span class="none">${r.pending ? '…' : r.rej.length ? 'bez platného tahu' : 'bez tahu'}</span>`;
+    const rej = r.rej.length ? `<div class="rejl">${r.rej.map(e => `<s><small>${e.pos}</small>${esc(e.main)}<b>${e.score}</b></s>`).join('')}</div>` : '';
+    const fresh = t.phase === 'reveal' && (r.ev?.key === shownKey || r.rej.some(e => e.key === shownKey));
+    return `<div class="li ${fresh ? 'fresh' : ''}">
+      <div class="who">${r.uids.map(u => teamChip(teamBy(u), 'sm')).join('')}</div>
+      <div class="w">${word}</div>
+      <div class="p">${r.ev ? r.ev.score : r.pending ? '' : '0'}</div><div class="pc">${pc}</div>${rej}</div>`;
+  }).join('');
+  return `${now}<div class="list">${list}</div>`;
+}
+
+/* Přehled hry: tabulka tahy × týmy (položené slovo zvýrazněné) + dlaždice k reflexi */
+function gameRecords() {
+  const recs = [];   // { t, uid, ev, rej: [ev] }
+  state.turns.filter(t => t.done).forEach(t => state.teams.forEach(team => {
+    if (t.pts[team.uid] == null) return;
+    const ev = teamMove(t, team.uid);
+    const rej = (t.moves[team.uid] || []).map(c => evalCand(t, c)).filter(e => e.ok && t.flags[e.key] === 'no');
+    recs.push({ t, uid: team.uid, ev, rej, pts: t.pts[team.uid] || 0 });
+  }));
+  return recs;
+}
+// medaile se stužkou (1–3 zlato / stříbro / bronz), 4.–5. místo jen nenápadné číslo
+const MEDAL = { 1: ['#f2c230', '#b8860b'], 2: ['#e3e6e8', '#8d969c'], 3: ['#d7894a', '#8a4f22'] };
+function medal(n) {
+  if (!MEDAL[n]) return `<span class="rk">${n}</span>`;
+  const [fill, dark] = MEDAL[n];
+  return `<svg class="medal" viewBox="0 0 24 30"><path d="M6 1h5l3 9H9z" fill="#c4643c"/><path d="M13 1h5l-3 9h-5z" fill="#7d8c55"/>
+    <circle cx="12" cy="19" r="9" fill="${fill}" stroke="${dark}" stroke-width="1.6"/>
+    <text x="12" y="23" text-anchor="middle" font-size="11" font-weight="800" fill="${dark}" font-family="Lexend, sans-serif">${n}</text></svg>`;
+}
+// počet řádků statistik v přehledu (3 rekordy + 7 kamenů, když bylo + Vítěz kola)
+function ovRecCount() {
+  const recs = gameRecords().filter(r => r.ev);
+  return recs.length ? 4 + (recs.some(r => r.ev.bingo) ? 1 : 0) : 1;
+}
+function overviewStage() {
+  const done = state.turns.filter(t => t.done);
+  if (!done.length) return `<div class="stage"><h1>Přehled hry</h1><h2>Zatím žádný odehraný tah</h2></div>`;
+  const teams = state.teams.filter(team => done.some(t => t.pts[team.uid] != null));
+  const recs = gameRecords();
+  const rec = (t, uid) => recs.find(r => r.t === t && r.uid === uid);
+  const { s } = totals();
+  const fs = Math.min(3, 62 / (done.length + 7) / 1.6, 20 / Math.max(1, teams.length));   // výška: řádky, šířka: týmy
+  const isPlaced = r => r.ev && r.t.placed && r.ev.key === r.t.placed.key;
+  const wcell = (word, val, cls = '') => `<td class="${cls}"><span class="cw"><b>${word}</b><i>${val}</i></span></td>`;
+  // tah: slovo vlevo, body vpravo; položené slovo tahu jemně orámované; ★ = všech 7 kamenů
+  // odhalování statistik Enterem (state.ovStep; null = vše hned): vítězové kol se v tazích zvýrazní,
+  // až se odhalí řádek Vítěz kola (poslední)
+  const nRec = ovRecCount(), step = state.ovStep == null ? nRec : state.ovStep;
+  const showPlaced = step >= nRec;
+  const cell = r => !r || !r.ev ? '<td class="empty">–</td>'
+    : wcell(esc(r.ev.main) + (r.ev.bingo ? ' <span class="star7">★</span>' : ''), r.ev.score, showPlaced && isPlaced(r) ? 'placed' : '');
+  /* Rekordy = TOP 5 z celé hry, rozložené do sloupců týmů: slovo ve sloupci svého týmu s kroužkem
+     pořadí (1–5; 1–3 medailové barvy). Stejný tah víc týmů má stejné pořadí u každého z nich. */
+  const ratio = r => r.ev.score / r.ev.tiles.length;
+  const dec = n => String(Math.round(n * 10) / 10).replace('.', ',');
+  const uniq = new Map();
+  recs.filter(r => r.ev).forEach(r => { const k = r.t.no + '|' + r.ev.key; if (!uniq.has(k)) uniq.set(k, { ...r, uids: [] }); uniq.get(k).uids.push(r.uid); });
+  const all = [...uniq.values()];
+  const topRow = (label, items, show) => {
+    if (!items.length) return '';
+    const by = {}, gold = new Set();
+    items.slice(0, 5).forEach((r, i) => r.uids.forEach(u => {
+      (by[u] ||= []).push(`<span class="cw"><b>${medal(i + 1)}${esc(r.ev.main)}</b><i>${show(r)}</i></span>`);
+      if (i === 0) gold.add(u);   // buňka se zlatou medailí orámovaná (jako Vítěz kola)
+    }));
+    return `<tr class="rec"><th>${label}</th>${teams.map(team => by[team.uid]
+      ? `<td class="${gold.has(team.uid) ? 'best' : ''}">${by[team.uid].join('')}</td>` : '<td class="empty"></td>').join('')}</tr>`;
+  };
+  const placedN = teams.map(team => done.filter(t => isPlaced(rec(t, team.uid) || {})).length);
+  const recList = [
+    topRow('Nejvíc bodovaná slova', [...all].sort((a, b) => b.ev.score - a.ev.score), r => r.ev.score),
+    topRow('Nejdelší slova', [...all].sort((a, b) => b.ev.cells.length - a.ev.cells.length || b.ev.score - a.ev.score), r => r.ev.cells.length),
+    topRow('Nejvíc bodů za kámen', [...all].sort((a, b) => ratio(b) - ratio(a)), r => dec(ratio(r))),
+    topRow('Všech 7 kamenů', all.filter(r => r.ev.bingo).sort((a, b) => b.ev.score - a.ev.score), r => r.ev.score),
+    // vítěz kola: medaile podle počtu (hustý ranking, 0× bez medaile)
+    `<tr class="rec"><th>Vítěz kola</th>${placedN.map(n => {
+      const rank = [...new Set(placedN.filter(x => x > 0))].sort((a, b) => b - a).indexOf(n) + 1;
+      return `<td class="${n && rank === 1 ? 'best' : ''}"><span class="cw"><b>${n && rank <= 3 ? medal(rank) : ''}</b><i>${n}×</i></span></td>`;
+    }).join('')}</tr>`,
+  ].filter(Boolean);
+  // neodhalené řádky drží místo (rozložení neskáče), nově odhalený naskočí
+  const recRows = recList.map((h, i) => h.replace('<tr class="rec"',
+    `<tr class="rec ${i < step ? freshly('ov' + i, true) : (freshly('ov' + i, false), 'hid')}"`)).join('');
+  const rows = done.map(t => `<tr><th>${t.no}.</th>${teams.map(team => cell(rec(t, team.uid))).join('')}</tr>`).join('');
+  // šířka podle počtu týmů (ne podle písma), písmo pak dorovná fitOverview
+  const head = `<tr class="hd"><th></th>${teams.map(team => `<th>${teamChip(team, 'sm')}</th>`).join('')}</tr>`;
+  const table = `<table class="ovt" style="font-size:${fs.toFixed(2)}cqh;width:${Math.min(94, 14 + teams.length * 20)}cqw">
+    <colgroup><col class="lab">${teams.map(() => '<col>').join('')}</colgroup>
+    <thead>${head}</thead>
+    <tbody class="turns">${rows}</tbody>
+    <tbody class="sum"><tr class="gap sm"><td colspan="${teams.length + 1}"></td></tr><tr><th>Σ</th>${teams.map(team => `<td class="${(s[team.uid] || 0) === Math.max(...teams.map(x => s[x.uid] || 0)) ? 'top' : ''}">${s[team.uid] || 0}</td>`).join('')}</tr></tbody>
+    <tbody class="recs"><tr class="gap"><td colspan="${teams.length + 1}"></td></tr>${step > 0 ? head : head.replace('<tr class="hd"', '<tr class="hd rec hid"')}${recRows}</tbody></table>`;   // druhé záhlaví až s první statistikou   // nejdřív tahy, pod nimi rekordy se zopakovaným záhlavím
+  return `<div class="stage ovs"><h1>Přehled hry</h1>${table}</div>`;
+}
+
+function rankStage() {
+  const done = state.turns.filter(t => t.done);
+  const last = done[done.length - 1];
+  const { s, b } = totals();
+  const max = Math.max(1, ...active().map(t => s[t.uid] || 0));
+  const rows = placing().ranked.map(x => {
+    const team = teamBy(x.uid), bon = b[x.uid] || 0;
+    return `<div class="row">
+      <div class="place">${x.place}.</div>
+      <div class="name">${teamChip(team)}</div>
+      <div class="bar"><i style="width:${(x.pts - bon) / max * 100}%;background:${team.color}"></i><i class="light" style="width:${bon / max * 100}%;background:${team.color}"></i></div>
+      <div class="pts">${x.pts}<small>${last ? `+${last.pts[x.uid] ?? 0}` : ''}${state.settings.pct ? ` · ${pctStr(pctOf(x.uid))}` : ''}</small></div>
+    </div>`;
+  }).join('');
+  const anyBingo = active().some(t => b[t.uid]);
+  return `<div class="stage">
+    <div class="kicker">Po ${done.length}. tahu</div>
+    <h1>Pořadí týmů</h1>
+    <div class="rank">${rows}
+      ${anyBingo ? '<div class="legend"><span><i></i>za slova</span><span><i class="light"></i>za všech 7 kamenů</span></div>' : ''}</div>
+  </div>`;
+}
+
+function finalStage() {
+  const { ranked, places } = placing();
+  const shownFrom = places - (state.revealed || 0) + 1;
+  const isShown = p => p >= shownFrom;
+  const step = p => {
+    const teams = ranked.filter(x => x.place === p);
+    if (!teams.length) return '';
+    const shown = isShown(p), anim = freshly('step' + p, shown);
+    return `<div class="step p${p}">
+      <div class="names ${anim}">${shown ? teams.map(x => teamChip(teamBy(x.uid), 'lg')).join('') : '<div class="hidden-name">?</div>'}</div>
+      <div class="block"><b>${p}.</b><span>${shown ? `${teams[0].pts} ${pw(teams[0].pts)}` : '&nbsp;'}</span></div></div>`;
+  };
+  const rest = ranked.filter(x => x.place > 3).map(x => isShown(x.place)
+    ? `<span class="${freshly('rest' + x.uid, true)}"><b>${x.place}.</b> ${teamChip(teamBy(x.uid), 'sm')} ${x.pts} ${pw(x.pts)}</span>`
+    : (freshly('rest' + x.uid, false), '')).join('');
+  return `<div class="stage"><div class="kicker">Konec hry</div><h1>Stupně vítězů</h1>
+    <div class="podium">${step(2)}${step(1)}${step(3)}</div><div class="rest">${rest}</div></div>`;
+}
+
+// tabulka přehledu: písmo zmenšit jen tolik, aby se vešlo nejdelší slovo (žádné ořezávání ani překryvy)
+function fitOverview(root) {
+  const t = root.querySelector('.ovt');
+  if (!t) return;
+  let fs = parseFloat(t.style.fontSize);
+  const box = (root.classList.contains('proj') ? root : root.closest('.proj') || root).getBoundingClientRect();
+  const cut = () => [...t.querySelectorAll('td b')].some(b => b.scrollWidth > b.clientWidth + 1)
+    || t.getBoundingClientRect().bottom > box.bottom - box.height * 0.03;   // ani na šířku, ani dolů
+  while (fs > 1.2 && cut()) { fs -= 0.1; t.style.fontSize = fs.toFixed(2) + 'cqh'; }
+}
+// časovač bez překreslení celé projekce
+function tick(root) {
+  root.querySelectorAll('[data-timer-end]').forEach(el => {
+    const left = +el.dataset.timerEnd - Date.now();
+    el.textContent = fmtTime(left);
+    el.classList.toggle('low', left < 10500);
+  });
+}
+
+function startProjection() {
+  document.title = 'Scrabble – projekce';
+  document.body.innerHTML = '<div id="proj" class="proj" style="position:fixed;inset:0;cursor:none"></div>';
+  const el = document.getElementById('proj');
+  let lastHtml = '';
+  const draw = () => {
+    state = load(); evalCache.clear();
+    const h = projectionHtml();
+    if (h !== lastHtml) { lastHtml = h; el.innerHTML = h; tick(el); fitOverview(el); document.fonts?.ready.then(() => fitOverview(el)); }
+  };
+  window.addEventListener('storage', e => { if (e.key === STORAGE_KEY) draw(); });
+  document.addEventListener('dblclick', () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen());
+  const ping = () => { try { localStorage.setItem(PING_KEY, String(Date.now())); } catch { } };
+  setInterval(ping, 1000); ping();
+  setInterval(() => tick(el), 200);
+  draw();
+}
+function projectionAlive() { try { return Date.now() - Number(localStorage.getItem(PING_KEY)) < 3000; } catch { return false; } }
+
+/* ================= Pult ================= */
+
+// kurzor drží konkrétní řešení (tým + pozice + slovo), ne jen pořadí – když tým na mobilu přidá
+// nebo přeřadí řešení, kurzor zůstane na stejném slově. uid = null → převzít z row/col.
+const cursor = { row: 0, col: 0, uid: null, mv: null };
+const mvId = c => c ? c.pos + '|' + c.word : null;
+function syncCursor(t) {
+  const teams = active();
+  if (!t || !teams.length) return;
+  if (cursor.uid) {
+    const r = teams.findIndex(x => x.uid === cursor.uid);
+    if (r >= 0) {
+      cursor.row = r;
+      const c = (t.moves[cursor.uid] || []).findIndex(m => mvId(m) === cursor.mv);
+      if (c >= 0) cursor.col = c;
+    }
+  }
+  cursor.row = Math.min(cursor.row, teams.length - 1);
+  const list = t.moves[teams[cursor.row].uid] || [];
+  cursor.col = Math.max(0, Math.min(cursor.col, list.length - 1));
+  cursor.uid = teams[cursor.row].uid; cursor.mv = mvId(list[cursor.col]);
+}
+const KEYBOARD_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="19" height="12" rx="2.2"/><path d="M6.5 10h.01M10 10h.01M13.5 10h.01M17 10h.01M6.5 14h.01M17.5 14h.01" stroke-width="2.2"/><path d="M9.5 14h5"/></svg>';
+// Backspace = krok zpět (prototyp jen ve Scrabblu) – v nápovědě všude, kde Zpět funguje
+const keyTip = rows => `<span class="keytip" tabindex="0" aria-label="Klávesy"><span class="qm">${KEYBOARD_SVG}</span><span class="tippop">${
+  rows.concat(state?.phase !== 'join' ? [['<kbd>Backspace</kbd>', 'krok zpět']] : []).map(([k, w]) => `<span>${k}</span><span>${w}</span>`).join('')}</span></span>`;
+document.addEventListener('mouseout', e => { const tip = e.target.closest?.('.keytip'); if (tip && !tip.contains(e.relatedTarget)) tip.blur(); });
+
+function render() {
+  document.getElementById('app').innerHTML = `
+    <header class="top">
+      <div class="brand">Scrabble<small>opis</small></div>
+      <div class="info" id="info"></div>
+      <div class="spacer"></div>
+      <span class="proj-status" id="proj-status"></span>
+      ${ScrabNet.mode === 'test' ? `<a class="btn small ghost" id="test-mobile" target="_blank" title="Otevře další kartu jako mobil jednoho týmu">+ Testovací mobil</a>` : ''}
+      <a class="btn primary" id="open-proj" href="#projekce" target="scrabble-projekce" title="Okno přetáhněte na projektor, dvojklik v něm = celá obrazovka">Otevřít projekci</a>
+      <button class="btn ghost" id="new-game">Nová hra</button>
+    </header>
+    <main>
+      <div><section class="panel" id="phase-panel"></section></div>
+      <div>
+        <section class="panel">
+          <div class="preview-head"><h3>Co vidí plátno</h3>
+            <div class="seg" id="view-seg">
+              <button data-view="auto">Hra</button><button data-view="join">Připojení</button>
+              <button data-view="rank">Pořadí</button><button data-view="overview">Přehled</button><button data-view="pause">Pauza</button>
+            </div></div>
+          <div class="preview-wrap"><div class="proj" id="preview"></div></div>
+        </section>
+        <section class="panel" id="score-panel"></section>
+        <section class="panel" id="settings-panel"></section>
+      </div>
+    </main>`;
+  // ruční přepnutí na Přehled ukáže vše najednou (postupné odhalování je jen na konci hry)
+  document.querySelectorAll('#view-seg button').forEach(b => b.onclick = () => { state.view = b.dataset.view; state.ovStep = null; b.blur(); commit(); });
+  renderAll();
+}
+
+function renderAll() {
+  if (!document.getElementById('phase-panel')) return;
+  const t = cur();
+  document.getElementById('info').innerHTML = state.phase === 'join' ? `Kód hry <b>${esc(state.code || '…')}</b>`
+    : `${t ? `Tah <b>${t.no}</b> · ` : ''}v sáčku <b>${state.bag.length}</b> · kód <b>${esc(state.code || '')}</b>`;
+  const tm = document.getElementById('test-mobile');
+  if (tm && state.code) tm.href = joinUrl();
+  renderPhase(); renderScore(); renderSettings();
+  document.querySelectorAll('#view-seg button').forEach(b => b.classList.toggle('on', b.dataset.view === state.view));
+  renderHeaderStatus(); renderPreview();
+}
+function renderPreview() {
+  const p = document.getElementById('preview');
+  if (!p) return;
+  p.innerHTML = projectionHtml(); tick(p); fitOverview(p);
+}
+function renderHeaderStatus() {
+  const el = document.getElementById('proj-status');
+  if (!el) return;
+  const alive = projectionAlive();
+  el.textContent = alive ? '● projekce běží' : 'projekce není otevřená';
+  el.className = 'proj-status' + (alive ? ' live' : '');
+  document.getElementById('open-proj').textContent = alive ? 'Přepnout na projekci' : 'Otevřít projekci';
+}
+
+const STEPS = [['ready', 'Losování'], ['think', 'Přemýšlení'], ['check', 'Kontrola'], ['reveal', 'Odhalování'], ['placed', 'Na desku'], ['rank', 'Pořadí']];
+function stepsHtml(phase) {
+  const at = STEPS.findIndex(s => s[0] === phase);
+  const st = state.settings;
+  // co plátno ukazuje – přepíná se kdykoli během hry, přímo nad fází (ne dole v nastavení)
+  const opt = (k, label) => `<button class="vopt ${st[k] ? 'on' : ''}" data-opt="${k}"><i></i>${label}</button>`;
+  return `<div class="steps">${STEPS.map((s, i) => `<span class="${i === at ? 'on' : i < at ? 'done' : ''} ${s[0] === 'rank' && !st.rank ? 'skip' : ''}">${s[1]}</span>`).join('')}</div>
+    <div class="vopts">Na plátně: ${opt('rank', 'pořadí po každém tahu')}${opt('pct', 'procenta z nejlepšího tahu')}</div>`;
+}
+const rackLine = t => `<div class="rackline">${t.rack.map(x => rackTile(x)).join('')}</div>`;
+
+function renderPhase() {
+  const el = document.getElementById('phase-panel');
+  const t = cur();
+  const back = `<button class="btn ghost" id="back" ${state.phase === 'join' ? 'disabled' : ''}>← Zpět</button>`;
+  let html = '', next = '', nextOk = true, endBtn = false;   // endBtn = „Ukončit hru“ vlevo vedle tlačítka dál
+  if (state.phase === 'game') syncCursor(t);
+
+  if (state.phase === 'join') {
+    html = `<h3>Připojení týmů ${keyTip([['<kbd>Enter</kbd>', 'začít hru']])}</h3>
+      <p class="sub">Každý tým naskenuje QR kód na plátně jedním mobilem a napíše název týmu. Názvy můžete přepsat.</p>
+      ${teamList()}`;
+    next = 'Začít hru – vylosovat kameny →'; nextOk = active().length > 0;
+  } else if (state.phase === 'final') {
+    const { places } = placing();
+    html = `<h3>Stupně vítězů ${keyTip([['<kbd>Enter</kbd>', 'odhalit další místo, nakonec přehled hry']])}</h3>
+      <p class="sub">Místa se odhalují od posledního po zlato.</p>
+`;
+    const ovMore = state.view === 'overview' && state.ovStep != null && state.ovStep < ovRecCount();
+    next = state.revealed < places ? 'Odhalit další místo →' : state.view !== 'overview' ? 'Přehled hry →' : ovMore ? 'Odhalit další statistiku →' : 'Vše odhaleno';
+    nextOk = state.revealed < places || state.view !== 'overview' || ovMore;
+  } else if (t.phase === 'ready') {
+    html = `${stepsHtml('ready')}<h3>Tah ${t.no} – vylosováno ${keyTip([['<kbd>Enter</kbd>', 'spustit čas']])}</h3>
+      <div class="set-row"><label for="time-in">Čas na tah (minuty)</label>
+        <input class="num" id="time-in" type="number" min="0.5" max="15" step="0.5" value="${state.settings.time / 60}"></div>
+      <p class="help">${t.redrawn ? `Losovalo se znovu (${t.redrawn}×) – zásobník nesplňoval podmínku samohlásek a souhlásek. ` : ''}Týmy mohou zkoušet slova v mobilu, až se spustí čas.</p>`;
+    next = 'Spustit čas →';
+  } else if (t.phase === 'think' || t.phase === 'check') {
+    const think = t.phase === 'think';
+    html = `${stepsHtml(t.phase)}
+      <h3>${think ? 'Týmy přemýšlejí' : 'Kontrola řešení'} ${keyTip([['<kbd>↑</kbd> <kbd>↓</kbd>', 'tým'], ['<kbd>←</kbd> <kbd>→</kbd>', 'řešení týmu'],
+        ['<kbd>mezerník</kbd>', 'dokola čeká → ✓ uznat → ⚠ váhám → ✕ neuznat'], ['<kbd>Esc</kbd>', '⚠ váhám – tým to hned vidí'], ['<kbd>Delete</kbd>', 'neuznat – signál týmu „hledejte dál“, rozhodne se při odhalování'],
+        ['<kbd>+</kbd>', think ? 'přidat minutu' : 'ještě minutu (znovu otevře čas)'], ...(think ? [['<kbd>P</kbd>', 'pozastavit / pokračovat']] : []),
+        ['<kbd>Enter</kbd>', think ? 'ukončit čas' : 'odhalovat tahy']])}</h3>
+      ${think ? `<div class="clockline">${t.paused != null ? `<span class="big paused">${fmtTime(t.paused)}</span>`
+          : `<span class="big" data-timer-end="${t.endsAt - (state.off || 0)}">${fmtTime(t.endsAt - now())}</span>`}
+        <button class="btn small ${t.paused != null ? 'primary' : ''}" id="pause">${t.paused != null ? '▶ Pokračovat' : '⏸ Pozastavit'}</button>
+        <span class="addtime">přidat ${ADD_TIMES.map(([s, l]) => `<button class="btn small" data-add="${s}">+${l}</button>`).join('')}</span></div>`
+      : `<p class="sub">Týmy značky vidí hned, rozhoduje se až při odhalování.</p>
+        <div class="clockline"><span class="addtime">Týmy ještě hrají – znovu otevřít čas ${ADD_TIMES.map(([s, l]) => `<button class="btn small" data-add="${s}">+${l}</button>`).join('')}</span></div>`}
+      ${teamsTable(t)}${candDetail(t)}`;
+    next = think ? 'Ukončit čas →' : 'Odhalovat tahy →';
+  } else if (t.phase === 'reveal') {
+    const nx = nextToReveal(t), shown = t.shown[t.shown.length - 1];
+    html = `${stepsHtml('reveal')}
+      <h3>Odhalování ${keyTip([['<kbd>Enter</kbd>', nx ? 'odhalit další tah (kurzor na něj skočí)' : 'položit nejlepší tah'], ['<kbd>↑</kbd> <kbd>↓</kbd>', 'tým'], ['<kbd>←</kbd> <kbd>→</kbd>', 'řešení týmu'],
+        ['<kbd>mezerník</kbd>', 'dokola ✓ uznat → ⚠ váhám → ✕ neuznat'], ['<kbd>Esc</kbd>', '⚠ váhám – u tahu na plátně „posuzujeme“'], ['<kbd>Delete</kbd>', 'neuznat']])}</h3>
+      <p class="sub">Tahy se odhalují od nejslabšího. ${shown ? `Na plátně: <b>${esc(findMove(t, shown)?.ev.pos)} ${esc(findMove(t, shown)?.ev.main)}</b>` : ''}
+        ${!decidedShown(t) ? '<br><b style="color:var(--honey)">Nejdřív rozhodněte: ✓ uznat, nebo ✕ neuznat.</b>' : ''}</p>
+      ${teamsTable(t)}${candDetail(t)}`;
+    next = nx ? `Odhalit další tah →` : 'Položit nejlepší tah na desku →';
+    nextOk = decidedShown(t);
+  } else if (t.phase === 'placed') {
+    html = `${stepsHtml('placed')}<h3>Na desce ${keyTip([['<kbd>Enter</kbd>', t.over ? 'stupně vítězů' : state.settings.rank ? 'pořadí' : 'další tah']])}</h3>
+      <p class="sub">${t.placed ? `Položeno <b>${t.placed.pos} ${esc(t.placed.main)}</b> za ${t.placed.score} ${pw(t.placed.score)}.` : 'Nikdo nic nepoložil.'}
+      ${t.over ? ' <b>Kameny došly – konec hry.</b>' : ''}</p>${teamsTable(t)}`;
+    endBtn = !t.over;
+    next = t.over ? 'Stupně vítězů →' : state.settings.rank ? 'Pořadí →' : 'Další tah – vylosovat →';
+  } else if (t.phase === 'rank') {
+    html = `${stepsHtml('rank')}<h3>Pořadí po ${t.no}. tahu ${keyTip([['<kbd>Enter</kbd>', 'další tah']])}</h3>
+      <p class="sub">${!t.placed ? 'Nikdo nic nepoložil – další tah dostane úplně nový zásobník.' : 'Další tah doplní zásobník na 7 kamenů.'}</p>
+      ${teamList()}`;
+    endBtn = true;
+    next = 'Další tah – vylosovat →';
+  }
+  const actions = `<div class="actions">${back}<span class="spacer"></span>
+    ${endBtn ? '<button class="btn ghost" id="end-game">Ukončit hru → stupně vítězů</button>' : ''}
+    <button class="btn primary" id="next" ${nextOk ? '' : 'disabled'}>${next}</button></div>`;
+  el.innerHTML = html.includes('<!--ACTIONS-->') ? html.replace('<!--ACTIONS-->', actions.replace('class="actions"', 'class="actions dact"')) : html + actions;
+  bindPhase(el, t);
+}
+
+function teamList() {
+  const teams = state.teams;
+  if (!teams.length) return '<p class="none">Zatím se nepřipojil žádný tým.</p>';
+  return teams.map(team => `<div class="team-row">
+      <span class="dot" style="background:${team.color}"></span>
+      <input class="name-in" data-uid="${team.uid}" value="${esc(team.name)}" aria-label="Název týmu">
+      <input class="note-in" data-note="${team.uid}" value="${esc(team.note || '')}" placeholder="poznámka – vidíte jen vy" aria-label="Interní poznámka k týmu">
+      ${team.out ? '<span class="out-tag">vyřazen</span>' : '<span></span>'}
+      <button class="team-del" data-uid="${team.uid}" title="${team.out ? 'Vrátit do hry' : 'Vyřadit tým'}">${team.out ? '↺' : '×'}</button>
+    </div>`).join('');
+}
+
+function teamsTable(t) {
+  const teams = active();
+  if (!teams.length) return '<p class="none">Žádné týmy.</p>';
+  const ck = curCand(t)?.e.key;   // stejný tah u jiných týmů = značka platí i pro ně
+  return `<div>${teams.map((team, ri) => {
+    const list = t.moves[team.uid] || [];
+    const eff = teamMove(t, team.uid);
+    const cells = list.map((c, ci) => {
+      const e = evalCand(t, c), f = e.ok ? fl(t, team.uid, e.key) : null;
+      const cls = [!e.ok ? 'bad' : '', f || '', eff?.idx === ci ? 'eff' : '', cursor.row === ri && cursor.col === ci ? 'cur' : ck && e.key === ck ? 'same' : ''].join(' ');
+      return `<button class="cand ${cls}" data-r="${ri}" data-c="${ci}" title="${esc(e.ok ? e.words.map(w => `${w.w} ${w.s}`).join(', ') + (e.bingo ? ` + ${e.bingo}` : '') : e.err)}">
+        <b>${ci + 1}.</b> ${esc(L.up(c.pos))} <span class="w">${esc(L.up(c.word))}</span><span class="s">${e.ok ? e.score : '–'}</span></button>`;
+    }).join('');
+    const pts = t.done ? t.pts[team.uid] ?? 0 : eff ? eff.score : '–';
+    // odevzdané řešení týmu už uznané = tým posouzený, řádek zešedne
+    const settled = finalPhase(t) && isSettled(t, team.uid);
+    return `<div class="trow ${cursor.row === ri ? 'cur-row' : ''} ${settled ? 'settled' : ''}">
+      <span class="dot" style="background:${team.color}"></span><span class="tn" title="${esc(team.note || '')}">${esc(team.name)}${team.note ? `<small>${esc(team.note)}</small>` : ''}</span>
+      <div class="cands">${cells || '<span class="none">zatím nic</span>'}</div><span class="tot">${pts}</span></div>`;
+  }).join('')}</div>`;
+}
+
+function curCand(t) {
+  const team = active()[cursor.row];
+  const c = (t.moves[team?.uid] || [])[cursor.col];
+  return c ? { team, c, e: evalCand(t, c) } : null;
+}
+// využitá prémiová pole slova (jen pod nově položenými kameny) – štítky v barvách polí desky
+const PREM_TXT = { DL: '2× písm.', TL: '3× písm.', DW: '2× slovo', TW: '3× slovo' };
+function premTags(e, w) {
+  const fresh = new Map(e.tiles.map(x => [x.i, x.t]));
+  return (w.cells || []).filter(i => fresh.has(i) && L.PREM[i]).map(i => {
+    // pole se souřadnicí – stejné pole ve dvou slovech pozná moderátor podle stejného označení
+    const p = L.PREM[i], letter = p === 'DL' || p === 'TL' ? ` ${esc(L.up(fresh.get(i)))}` : '';
+    return ` <span class="prem ${p}">${PREM_TXT[p]}${letter} · ${L.cellName(i)}</span>`;
+  }).join('');
+}
+// slovo po písmenech; písmeno na prémiovém poli podtržené barvou toho pole
+function wordHtml(t, e, w) {
+  if (!w.cells) return esc(w.w);
+  const fresh = new Map(e.tiles.map(x => [x.i, x.t])), board = L.boardFromStr(t.board0);
+  return w.cells.map(i => {
+    const ch = esc(L.up(fresh.get(i) ?? board[i]));
+    return fresh.has(i) && L.PREM[i] ? `<u class="pu ${L.PREM[i]}">${ch}</u>` : ch;
+  }).join('');
+}
+function candDetail(t) {
+  const x = curCand(t);
+  // <!--ACTIONS--> = místo pro tlačítka Zpět / dál: vpravo vedle spodku desky, ať nejsou mimo obrazovku
+  // stavová tlačítka vždy nahoře na stejném místě (neposkakují podle počtu slov); bez platného řešení zašedlá
+  const flags = (f, on) => `<div class="flags">${[['', 'Čeká'], ['ok', '✓ Uznat'], ['warn', '⚠ Váhám'], ['no', '✕ Neuznat']]
+    .map(([v, l]) => `<button class="btn small flagbtn ${on && (f || '') === v ? 'on' : ''}" data-flag="${v}" ${on ? '' : 'disabled'}>${l}</button>`).join('')}</div>`;
+  if (!x) return `<div class="detail"><div>${boardHtml(L.boardFromStr(t.board0), '300px')}</div><div class="dright">${flags(null, false)}<p class="help">Šipkami nebo klikem vyberte řešení týmu – ukáže se tady na desce.</p><!--ACTIONS--></div></div>`;
+  const { team, c, e } = x;
+  const f = e.ok ? fl(t, team.uid, e.key) : null;
+  return `<div class="detail">
+    <div>${boardHtml(L.boardFromStr(t.board0), '300px', e.ok ? { ghost: { tiles: e.tiles, color: team.color, rej: f === 'no' } } : {})}</div>
+    <div class="dright">
+      ${flags(f, e.ok)}
+      <div style="margin-bottom:6px">${teamChip(team)}</div>
+      <div><b>${esc(L.up(c.pos))}</b> <span class="w" style="font-family:var(--tile);font-weight:700">${esc(L.up(c.word))}</span></div>
+      ${e.ok ? `<div class="words">${e.words.map(w => `<span class="w">${wordHtml(t, e, w)}</span> ${w.s}${premTags(e, w)}`).join('<br>')}${e.bingo ? `<br>všech 7 kamenů +${e.bingo}` : ''}<br><b>celkem ${e.score} ${pw(e.score)}</b></div>
+        ${(() => { const o = active().filter(x => x !== team && (t.moves[x.uid] || []).some(c2 => evalCand(t, c2).key === e.key));
+          return o.length ? `<div class="same-note">Stejný tah mají i ${o.map(x => teamChip(x)).join(' ')} – značka platí i pro ně.</div>` : ''; })()}`
+      : `<div class="err">${esc(e.err)}</div>`}
+      <!--ACTIONS--></div></div>`;
+}
+
+// mezerník dokola: uznat → ⚠ pochybnost → ✕ neuznat → uznat
+// dokola: neposouzeno → ✓ uznáno → ⚠ pochybnost → ✕ neuznáno → neposouzeno
+// při odhalování se „Čeká“ přeskakuje: uznat → váhám → neuznat → uznat
+const cycleFlag = (f, t) => !f ? 'ok' : f === 'ok' ? 'warn' : f === 'warn' ? 'no' : t && t.phase === 'reveal' ? 'ok' : '';
+function setFlag(t, key, val, toggle) {
+  if (!key || t.done) return;
+  if (!val || (toggle && t.flags[key] === val)) delete t.flags[key]; else t.flags[key] = val;
+  commit();
+}
+
+function bindPhase(el, t) {
+  const nextBtn = document.getElementById('next');
+  nextBtn.onclick = () => { nextBtn.blur(); goNext(); };
+  document.getElementById('back').onclick = e => { e.currentTarget.blur(); goBack(); };
+  el.querySelectorAll('input.name-in').forEach(inp => {
+    inp.onchange = () => {
+      const team = teamBy(inp.dataset.uid), v = inp.value.trim();
+      if (!team || !v) return;
+      team.name = v;
+      ScrabNet.set(state.code, `teams/${team.uid}`, { name: v, at: Date.now() });
+      commit();
+    };
+    inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
+  });
+  // interní poznámka k týmu – jen v pultu (na plátno ani do mobilů nejde)
+  el.querySelectorAll('input.note-in').forEach(inp => {
+    inp.oninput = () => { const team = teamBy(inp.dataset.note); if (team) { team.note = inp.value; save(); } };
+    inp.onkeydown = e => { if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); inp.blur(); } };
+  });
+  el.querySelectorAll('.team-del').forEach(b => b.onclick = () => {
+    const team = teamBy(b.dataset.uid);
+    if (!team) return;
+    const played = state.turns.some(x => x.done && x.pts[team.uid] != null);
+    if (team.out) team.out = false;
+    else if (!played) {   // tým, který ještě nehrál, zmizí úplně
+      if (!confirm(`Odebrat tým ${team.name}?`)) return;
+      state.teams = state.teams.filter(x => x !== team);
+      ScrabNet.set(state.code, `teams/${team.uid}`, null);
+    } else {
+      if (!confirm(`Vyřadit ${team.name} ze hry? Jeho body zůstanou.`)) return;
+      team.out = true;
+    }
+    commit();
+  });
+  // klik na tým (mimo jeho slova) = přejít na tým
+  el.querySelectorAll('.trow').forEach((row, ri) => row.onclick = ev => {
+    if (ev.target.closest('.cand') || cursor.row === ri) return;
+    cursor.row = ri; cursor.col = 0; cursor.uid = null; renderAll();
+  });
+  // klik vybere řešení; klik na už vybrané přepne stav jako mezerník
+  el.querySelectorAll('.cand').forEach(b => b.onclick = () => {
+    b.blur();
+    if (cursor.row === +b.dataset.r && cursor.col === +b.dataset.c) {
+      const x = curCand(t);
+      if (x?.e.ok && !t.done) return setFlag(t, x.e.key, cycleFlag(t.flags[x.e.key], t));
+    }
+    cursor.row = +b.dataset.r; cursor.col = +b.dataset.c; cursor.uid = null; renderAll();
+  });
+  el.querySelectorAll('.flagbtn').forEach(b => b.onclick = () => { const x = curCand(t); b.blur(); if (x?.e.ok) setFlag(t, x.e.key, b.dataset.flag, true); });   // znovu klik = zpět na neposouzeno
+  el.querySelectorAll('.vopt').forEach(b => b.onclick = () => { b.blur(); state.settings[b.dataset.opt] = !state.settings[b.dataset.opt]; commit(); });
+  const pz = document.getElementById('pause');
+  if (pz) pz.onclick = () => { pz.blur(); togglePause(t); };
+  el.querySelectorAll('[data-add]').forEach(b => b.onclick = () => { b.blur(); addTime(t, +b.dataset.add); });
+  const ti = document.getElementById('time-in');
+  if (ti) {
+    ti.onchange = () => { const v = parseFloat(String(ti.value).replace(',', '.')); if (v > 0) { state.settings.time = Math.round(Math.min(15, v) * 60); commit(); } };
+    ti.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ti.blur(); } };
+  }
+  const eg = document.getElementById('end-game');
+  if (eg) eg.onclick = () => {
+    if (!confirm('Ukončit hru a ukázat stupně vítězů?')) return;
+    state.finalFrom = t.phase;
+    state.phase = 'final'; state.revealed = 0; state.view = 'auto'; commit();
+  };
+  const ng = document.getElementById('new-game');   // v hlavičce vpravo nahoře jako v ostatních hrách
+  if (ng) ng.onclick = () => { ng.blur(); newGame(true); };
+}
+
+function goNext() {
+  const t = cur();
+  // stupně vítězů: po odhalení všech míst další Enter = Přehled hry (statistiky)
+  if (state.phase === 'final') {
+    if (state.revealed < placing().places) { state.view = 'auto'; state.revealed++; }
+    else if (state.view !== 'overview') { state.view = 'overview'; state.ovStep = 0; }
+    else if (state.ovStep != null && state.ovStep < ovRecCount()) state.ovStep++;   // statistiky po řádcích
+    return commit();
+  }
+  if (state.view !== 'auto') state.view = 'auto';
+  if (state.phase === 'join') {
+    if (!active().length) return;
+    state.phase = 'game'; startTurn(); drawSounds(cur());
+  } else if (state.phase === 'final') {
+    if (state.revealed < placing().places) state.revealed++;
+  } else if (t.phase === 'ready') {
+    stopDrawSounds();
+    t.phase = 'think'; t.paused = null; t.endsAt = now() + state.settings.time * 1000;
+  } else if (t.phase === 'think') {
+    if (timeLeft(t) > 1000 && !confirm('Čas ještě běží. Ukončit ho a začít kontrolu?')) return;
+    closeThink(t); return;
+  } else if (t.phase === 'check') {
+    t.phase = 'reveal'; t.shown = [];
+    const nx = nextToReveal(t); if (nx) { t.shown.push(nx.ev.key); cursorTo(t, nx.ev.key); }
+  } else if (t.phase === 'reveal') {
+    if (!decidedShown(t)) return;
+    settleShown(t);
+    const nx = nextToReveal(t);
+    if (nx) { t.shown.push(nx.ev.key); cursorTo(t, nx.ev.key); } else { placeBest(t); placeSound(t); }
+  } else if (t.phase === 'placed') {
+    if (t.over) { state.finalFrom = 'placed'; state.phase = 'final'; state.revealed = 0; }
+    else if (state.settings.rank) t.phase = 'rank';
+    else { startTurn(); drawSounds(cur()); }   // pořadí vypnuté: rovnou další tah (tah zůstane „na desce“, Zpět se vrátí sem)
+  } else if (t.phase === 'rank') {
+    startTurn(); drawSounds(cur());
+  }
+  commit();
+}
+const ADD_TIMES = [[10, '10 s'], [20, '20 s'], [30, '30 s'], [60, '1 min'], [120, '2 min'], [300, '5 min']];
+// při odhalování jde dál (Enter) až po rozhodnutí tahu na plátně: ✓ uznáno, nebo ✕ neuznáno
+const decidedShown = t => { const k = t.shown[t.shown.length - 1]; return !k || t.flags[k] === 'ok' || t.flags[k] === 'no'; };
+// Enter při odhalování za uznaným tahem: týmy, kterým ten tah platí, jsou vypořádané (řádek zešedne)
+function settleShown(t) {
+  const k = t.shown[t.shown.length - 1];
+  if (!k || t.flags[k] !== 'ok') return;
+  t.settled ||= {};
+  active().forEach(team => { if (teamMove(t, team.uid)?.key === k) t.settled[team.uid] = k; });
+}
+// vypořádaný = Enterem odsouhlasený uznaný tah, který týmu pořád platí
+const isSettled = (t, uid) => !!t.settled?.[uid] && t.flags[t.settled[uid]] === 'ok' && teamMove(t, uid)?.key === t.settled[uid];
+// kurzor na řešení s daným klíčem (první tým, který ho má jako platný tah)
+function cursorTo(t, key) {
+  const teams = active();
+  for (let r = 0; r < teams.length; r++) {
+    const c = (t.moves[teams[r].uid] || []).findIndex(m => evalCand(t, m).key === key);
+    if (c >= 0) { cursor.row = r; cursor.col = c; cursor.uid = null; return; }
+  }
+}
+// přidat čas na tah – během přemýšlení se prodlouží, z kontroly se čas znovu otevře
+function addTime(t, sec) {
+  if (t.phase === 'think') { if (t.paused != null) t.paused += sec * 1000; else t.endsAt += sec * 1000; }
+  else if (t.phase === 'check') { t.phase = 'think'; t.paused = null; t.endsAt = now() + sec * 1000; }
+  else return;
+  commit();
+}
+// pauza času: t.paused = zbývající ms (čas stojí), pokračování dopočítá nový konec
+const timeLeft = t => t.paused != null ? t.paused : t.endsAt - now();
+function togglePause(t) {
+  if (t.phase !== 'think') return;
+  if (t.paused != null) { t.endsAt = now() + t.paused; t.paused = null; }
+  else t.paused = Math.max(0, t.endsAt - now());
+  commit();
+}
+function closeThink(t) {
+  gongSound(); copyMoves(t); t.phase = 'check'; t.endsAt = t.paused != null ? now() : Math.min(t.endsAt, now()); t.paused = null; commit(); }
+
+function goBack() {
+  const t = cur();
+  if (state.phase === 'final' && state.view === 'overview' && state.ovStep > 0) state.ovStep--;   // skrýt poslední statistiku
+  else if (state.phase === 'final' && state.view === 'overview') state.view = 'auto';   // z přehledu zpět na stupně
+  else if (state.phase === 'final' && state.revealed > 0) state.revealed--;   // pódium: skrýt naposledy odhalené místo
+  else if (state.phase === 'final') {   // zpět do hry tam, odkud se hra ukončila (ne na Pořadí, když se neukazuje)
+    state.phase = 'game';
+    t.phase = state.finalFrom === 'rank' && state.settings.rank ? 'rank' : 'placed';
+  }
+  else if (state.phase === 'join') return;
+  else if (t.phase === 'ready') {
+    // vylosovaný zásobník si zapamatovat – Enter pak vrátí stejný tah, ne nové losování
+    if (!state.redo || 'no' in state.redo) state.redo = {};
+    state.redo[t.no] = { board0: t.board0, bag0: t.bag0.join(','), bagAfter: state.bag, turn: t };
+    state.bag = t.bag0; state.turns.pop();
+    if (!state.turns.length) state.phase = 'join';
+    else if (!state.settings.rank && cur().phase === 'rank') cur().phase = 'placed';   // pořadí se neukazuje → nevracet se na něj
+  } else if (t.phase === 'think') { t.phase = 'ready'; t.endsAt = null; t.paused = null; }
+  else if (t.phase === 'check') { t.phase = 'think'; t.paused = null; t.endsAt = now() + 60000; }   // omylem ukončený čas: ještě minuta
+  else if (t.phase === 'reveal') {
+    const k = t.shown.pop();
+    for (const u in t.settled || {}) if (t.settled[u] === k) delete t.settled[u];   // vypořádání tím tahem se ruší
+    if (!t.shown.length) t.phase = 'check';
+  }
+  else if (t.phase === 'placed') {
+    state.board = L.boardFromStr(t.board0); t.placed = null; t.done = false; t.pts = {}; t.bingo = {}; t.top = 0; t.over = false; t.phase = 'reveal';
+  } else if (t.phase === 'rank') t.phase = 'placed';
+  commit();
+}
+
+function renderScore() {
+  const el = document.getElementById('score-panel');
+  const done = state.turns.filter(t => t.done);
+  if (!done.length) { el.innerHTML = '<h3>Body</h3><p class="help">Body se ukážou po prvním tahu.</p>'; return; }
+  const { s } = totals();
+  const last = done[done.length - 1];
+  el.innerHTML = `<h3>Body</h3>
+    <table class="score"><thead><tr><th>Tým</th><th>poslední tah</th><th>celkem</th><th>% z nejlepších</th></tr></thead><tbody>
+    ${placing().ranked.map(x => { const team = teamBy(x.uid); return `<tr><td><span class="dot" style="background:${team.color};width:10px;height:10px;margin-right:10px;vertical-align:-1px"></span>${esc(team.name)}</td>
+      <td>${last.pts[x.uid] ?? 0}</td><td><b>${x.pts}</b></td><td>${pctStr(pctOf(x.uid))}</td></tr>`; }).join('')}
+    </tbody></table>
+    <div class="hist">${done.slice().reverse().map(t => `${t.no}. ${t.placed ? `${t.placed.pos} <span class="w">${esc(t.placed.main)}</span> ${t.placed.score}` : '– nikdo nic nepoložil'}`).join('<br>')}</div>`;
+}
+
+function renderSettings() {
+  const el = document.getElementById('settings-panel');
+  const st = state.settings;
+  el.innerHTML = `<h3>Nastavení</h3>
+    <div class="set-row"><label for="s-vc">Losovat aspoň 2 samohlásky a 2 souhlásky (od 16. tahu 1 + 1)</label><input type="checkbox" id="s-vc" ${st.vc ? 'checked' : ''}></div>
+    <div class="set-row"><label for="s-bonus">Bonus za položení všech 7 kamenů</label><input class="num" id="s-bonus" type="number" min="0" max="200" value="${st.bonus}"></div>`;
+  document.getElementById('s-vc').onchange = e => { st.vc = e.target.checked; e.target.blur(); commit(); };
+  const b = document.getElementById('s-bonus');
+  b.onchange = () => { st.bonus = Math.max(0, parseInt(b.value, 10) || 0); evalCache.clear(); commit(); };
+  b.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); b.blur(); } };
+}
+
+async function newGame(keepTeams) {
+  if (state.turns.length && !confirm('Opravdu začít novou hru? Body této hry se smažou, týmy zůstanou.')) return;
+  const code = state.code, teams = state.teams.filter(t => !t.out).map(t => ({ ...t, out: false }));
+  state = freshState(code, teams, state.settings);
+  evalCache.clear();
+  if (code) { await ScrabNet.set(code, 'moves', null); await ScrabNet.set(code, 'flags', null); }
+  lastFlags = '';
+  commit();
+}
+
+/* ================= Klávesy ================= */
+
+document.addEventListener('keydown', e => {
+  if (IS_PROJECTION || e.ctrlKey || e.altKey || e.metaKey) return;
+  if (editing()) return;
+  const t = cur();
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const nb = document.getElementById('next');
+    if (nb && !nb.disabled) nb.click();
+    return;
+  }
+  // prototyp (jen Scrabble): Backspace = krok zpět, protějšek Enteru
+  if (e.key === 'Backspace') {
+    e.preventDefault();
+    const bb = document.getElementById('back');
+    if (bb && !bb.disabled) bb.click();
+    return;
+  }
+  if (state.phase !== 'game' || !t) return;
+  if (e.key === '+' && (t.phase === 'think' || t.phase === 'check')) { e.preventDefault(); addTime(t, 60); return; }
+  if ((e.key === 'p' || e.key === 'P') && t.phase === 'think') { e.preventDefault(); togglePause(t); return; }
+  const browse = ['think', 'check', 'reveal'].includes(t.phase);
+  if (!browse) return;
+  const teams = active();
+  const listOf = r => t.moves[teams[r]?.uid] || [];
+  const move = (dr, dc) => {
+    e.preventDefault();
+    if (!teams.length) return;
+    if (dr) { cursor.row = (cursor.row + dr + teams.length) % teams.length; cursor.col = Math.min(cursor.col, Math.max(0, listOf(cursor.row).length - 1)); }
+    if (dc) { const n = listOf(cursor.row).length; if (n) cursor.col = (cursor.col + dc + n) % n; }
+    cursor.uid = null;
+    renderAll();
+  };
+  if (e.key === 'ArrowUp') return move(-1, 0);
+  if (e.key === 'ArrowDown') return move(1, 0);
+  if (e.key === 'ArrowLeft') return move(0, -1);
+  if (e.key === 'ArrowRight') return move(0, 1);
+  // značky platí vždy pro řešení pod kurzorem (při odhalování na něj kurzor skočí sám)
+  const x = curCand(t);
+  if (!x?.e.ok) return;
+  if (e.key === ' ') { e.preventDefault(); setFlag(t, x.e.key, cycleFlag(t.flags[x.e.key], t)); }
+  else if (e.key === 'Escape') { e.preventDefault(); setFlag(t, x.e.key, 'warn', true); }
+  else if (e.key === 'Delete') { e.preventDefault(); setFlag(t, x.e.key, 'no', true); }
+});
+
+/* ================= Start ================= */
+
+async function startConsole() {
+  await window.scrabbleLoad();
+  myUid = await ScrabNet.ready();
+  if (!state) state = freshState(null);
+  state.settings = { ...DEFAULTS, ...state.settings };
+  if (!state.code || !(await ScrabNet.exists(state.code))) {
+    // nová hra, nebo živá data zmizela (smazaná místnost) – nový kód, hra pokračuje
+    state.code = await ScrabNet.create();
+  }
+  save();
+  render();
+  connect();
+  lastMeta = ''; publish();
+  setInterval(() => {
+    const t = cur();
+    countdownSounds(t);
+    if (state.phase === 'game' && t?.phase === 'think' && t.paused == null && now() >= t.endsAt) closeThink(t);
+    const app = document.getElementById('app');
+    if (app) tick(app);
+  }, 200);
+  setInterval(renderHeaderStatus, 1500);
+}
+
+if (IS_PROJECTION) startProjection();
+else startConsole();
+</script>
+</body>
+</html>

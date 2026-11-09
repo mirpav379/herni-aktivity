@@ -1,0 +1,29 @@
+{
+  "rules": {
+    "scrabble": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && data.child('meta/owner').val() === auth.uid",
+        "meta": {
+          ".write": "auth != null && (!data.exists() || data.child('owner').val() === auth.uid)"
+        },
+        "flags": {
+          ".write": "auth != null && root.child('scrabble/' + $code + '/meta/owner').val() === auth.uid"
+        },
+        "teams": {
+          "$uid": {
+            ".write": "auth != null && (auth.uid === $uid || root.child('scrabble/' + $code + '/meta/owner').val() === auth.uid)"
+          }
+        },
+        "moves": {
+          ".write": "auth != null && root.child('scrabble/' + $code + '/meta/owner').val() === auth.uid",
+          "$turn": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && root.child('scrabble/' + $code + '/meta/phase').val() === 'think' && root.child('scrabble/' + $code + '/meta/turn').val() + '' === $turn && root.child('scrabble/' + $code + '/meta/endsAt').val() > now"
+            }
+          }
+        }
+      }
+    }
+  }
+}
