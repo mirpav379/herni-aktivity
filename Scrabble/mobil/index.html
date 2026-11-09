@@ -22,8 +22,18 @@
   .rack { display: flex; gap: 4px; justify-content: center; padding: 6px; border-radius: 10px; background: #4a2c18; margin-bottom: 8px; --cs: min(11vw, 46px); min-height: calc(var(--cs) + 12px); }
   .board-box { display: flex; justify-content: center; touch-action: none; }
   .bd { --bs: min(calc(100vw - 16px), 544px); }
+  .board-box { margin-top: 4px; }
   .bd .sq { cursor: pointer; }
-  .entry { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
+  .entry { display: flex; gap: 6px; align-items: center; }
+  /* okénko pro slovo: po volbě pole se objeví nahoře nad deskou (klávesnice zakryje spodek) */
+  .pop { display: none; position: fixed; top: 0; left: 0; right: 0; z-index: 10; max-width: 560px; margin: 0 auto;
+    background: var(--bg); padding: 8px 8px 10px; border-radius: 0 0 14px 14px; box-shadow: 0 6px 18px rgba(59, 42, 32, .28); }
+  .pop.on { display: block; }
+  .pop .status { margin: 6px 2px; }
+  .poph { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .poph .rack { flex: 1; margin: 0; --cs: min(9.5vw, 42px); }
+  .poph .clock { font-family: "Lexend", sans-serif; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; min-width: 46px; text-align: right; }
+  .poph .clock.low { color: var(--danger); }
   .dirs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; flex: none; }
   .dirs button { border: 0; background: transparent; width: 42px; height: 42px; cursor: pointer; display: grid; place-items: center; }
   .dirs button svg { width: 22px; height: 22px; }
@@ -172,29 +182,33 @@ function build() {
   const body = document.getElementById('body');
   if (shape === 'join') { body.innerHTML = `<div class="center"><b>Jste ve hře</b>Hra začne, až moderátor vylosuje první kameny. Dívejte se na plátno.</div>`; return; }
   if (shape === 'end') { endScreen(); return; }
+  boardGap = 4;
   body.innerHTML = `
     <div id="banner"></div>
     <div class="rack" id="rack"></div>
+    <div class="status" id="hint"></div>
     <div class="board-box" id="board"></div>
-    <div class="entry">
-      <div class="dirs" id="dirs"><button data-d="h" aria-label="vodorovně">${ARROW}</button><button data-d="v" aria-label="svisle">${ARROW}</button></div>
-      <span class="pos" id="pos">–</span>
-      <input class="word" id="word" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="done" placeholder="slovo">
-    </div>
-    <div class="status" id="status"></div>
-    <div class="btns"><button class="btn" id="drop">Zahodit</button><button class="btn primary" id="save">Uložit návrh</button></div>
     <h3>Naše návrhy <small>(dle priority položení)</small></h3>
-    <div id="list"></div>`;
+    <div id="list"></div>
+    <div class="pop" id="pop"><div class="poph"><div class="rack" id="rack2"></div><span class="clock" id="clock2"></span></div><form id="entryf" autocomplete="off">
+      <div class="entry">
+        <div class="dirs" id="dirs"><button type="button" data-d="h" aria-label="vodorovně">${ARROW}</button><button type="button" data-d="v" aria-label="svisle">${ARROW}</button></div>
+        <span class="pos" id="pos">–</span>
+        <input class="word" id="word" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="send" placeholder="slovo">
+      </div>
+      <div class="status" id="status"></div>
+      <div class="btns"><button type="button" class="btn" id="drop">Zahodit</button><button type="submit" class="btn primary" id="save">Uložit návrh</button></div>
+    </form></div>`;
   const word = document.getElementById('word');
   word.oninput = () => { ed.word = word.value; refresh(); };
-  word.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); saveTry(); } };
+  // Enter / „Odeslat“ na mobilní klávesnici = odeslání formuláře (keydown Enter na Androidu často nepřijde)
+  document.getElementById('entryf').onsubmit = e => { e.preventDefault(); ed.word = word.value; saveTry(); };
   document.getElementById('dirs').onclick = e => {
     const b = e.target.closest('button'); if (!b) return;
     ed.dir = b.dataset.d; if (ed.start == null) ed.start = null;
     refresh(); if (ed.start != null) word.focus();
   };
-  document.getElementById('drop').onclick = () => { ed.start = null; ed.dir = null; ed.word = ''; word.value = ''; refresh(); };
-  document.getElementById('save').onclick = saveTry;
+  document.getElementById('drop').onclick = () => { ed.start = null; ed.dir = null; ed.word = ''; word.value = ''; word.blur(); refresh(); };
   // ťuknutí = počáteční pole, tažení prstem = i směr
   const bx = document.getElementById('board');
   let down = null;
@@ -211,6 +225,8 @@ function build() {
   bx.addEventListener('pointercancel', () => down = null);
 }
 
+const BS = 'min(calc(100vw - 16px), 544px)';
+let boardGap = 4;
 const tryPos = () => ed.start != null && ed.dir ? L.posStr(Math.floor(ed.start / 15), ed.start % 15, ed.dir) : null;
 function tryEval() {
   const pos = tryPos();
@@ -235,15 +251,29 @@ function refresh() {
     : saveErr ? `<div class="banner" style="color:var(--danger)">${esc(saveErr)}</div>` : '';
   // po položení tahu jen kameny, které v zásobníku zbyly (meta.left)
   const shownRack = m.left ? (Array.isArray(m.left) ? m.left : Object.values(m.left)) : rack();
-  document.getElementById('rack').innerHTML = shownRack.map(t => `<div class="rt">${L.tileHtml(t, m.vals || {})}</div>`).join('');
+  const rackHtml = shownRack.map(t => `<div class="rt">${L.tileHtml(t, m.vals || {})}</div>`).join('');
+  document.getElementById('rack').innerHTML = rackHtml;
+  document.getElementById('rack2').innerHTML = rackHtml;
   // po konci času už zkoušení slov nemá smysl
   const playing = m.phase === 'think' || m.phase === 'ready';
-  document.getElementById('status').style.display = playing ? '' : 'none';
-  document.querySelectorAll('.entry, .btns').forEach(x => x.style.display = playing ? '' : 'none');
   if (!playing && (ed.start != null || ed.word)) { ed.start = null; ed.dir = null; ed.word = ''; }
+  const open = playing && ed.start != null;
+  const pop = document.getElementById('pop');
+  pop.classList.toggle('on', open);
+  // okénko nesmí zakrýt desku: deska začíná až pod ním (odstup se jen zvětšuje, ať nic neskáče)
+  if (open) {
+    const bx = document.getElementById('board');
+    const top = bx.getBoundingClientRect().top + scrollY - boardGap;
+    const need = Math.max(4, pop.offsetHeight + 6 - top);
+    if (need > boardGap) { boardGap = need; bx.style.marginTop = need + 'px'; }
+  }
   const t = tryEval();
+  const hint = document.getElementById('hint');
+  hint.style.display = playing && !open ? '' : 'none';
+  hint.className = t.err ? 'status err' : 'status';
+  hint.textContent = t.msg || t.err || '';
   const ghost = t.e?.ok ? { tiles: t.e.tiles, color: '#c4643c' } : null;
-  document.getElementById('board').innerHTML = L.boardHtml(board(), 'min(calc(100vw - 16px), 544px)', vals(), { ghost, start: ed.start != null && !ghost ? { i: ed.start, dir: ed.dir } : null });
+  document.getElementById('board').innerHTML = L.boardHtml(board(), BS, vals(), { ghost, start: ed.start != null && !ghost ? { i: ed.start, dir: ed.dir } : null });
   document.getElementById('dirs').classList.toggle('ask', ed.start != null && !ed.dir);
   document.querySelectorAll('#dirs button').forEach(b => b.classList.toggle('on', b.dataset.d === ed.dir));
   document.getElementById('pos').textContent = tryPos() || (ed.start != null ? L.cellName(ed.start) : '–');
@@ -318,13 +348,15 @@ async function push() {
 }
 
 function tickClock() {
-  const el = document.getElementById('clock');
-  if (!el) return;
   const m = meta();
-  if (m.phase === 'think' && m.paused != null) { el.textContent = '⏸ ' + fmt(m.paused); el.classList.remove('low'); }
-  else if (m.phase === 'think') { const left = (m.endsAt || 0) - ScrabNet.now(); el.textContent = fmt(left); el.classList.toggle('low', left < 10500); }
-  else if (m.phase === 'ready') { el.textContent = fmt((m.time || 0) * 1000); el.classList.remove('low'); }
-  else el.textContent = '';
+  ['clock', 'clock2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (m.phase === 'think' && m.paused != null) { el.textContent = '⏸ ' + fmt(m.paused); el.classList.remove('low'); }
+    else if (m.phase === 'think') { const left = (m.endsAt || 0) - ScrabNet.now(); el.textContent = fmt(left); el.classList.toggle('low', left < 10500); }
+    else if (m.phase === 'ready') { el.textContent = fmt((m.time || 0) * 1000); el.classList.remove('low'); }
+    else el.textContent = '';
+  });
 }
 let wasEditable = null;
 setInterval(() => {
