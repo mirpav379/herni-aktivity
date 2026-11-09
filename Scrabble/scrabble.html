@@ -673,6 +673,7 @@ function publish() {
   }
   const meta = { owner: myUid, phase: metaPhase(), turn: t ? t.no : 0, board: L.boardToStr(state.board), rack: t ? t.rack : [], vals: VALS,
     left: t?.placed ? rackAfter(t) : null,   // zbylé kameny po položení tahu
+    placed: !!t?.placed,                     // prázdné `left` (položeno všech 7) Firebase neuloží – mobil pozná podle tohoto
     board0: t ? t.board0 : '',               // deska na začátku tahu – podle ní se hodnotí návrhy (i po položení)
     // při pauze dostanou mobily vzdálený konec (ukládat jde dál) a zbývající čas zvlášť
     endsAt: t?.paused != null ? Date.now() + 864e5 : t?.endsAt || 0, paused: t?.paused ?? null,
